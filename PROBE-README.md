@@ -1,41 +1,37 @@
-# Harman's AX1800M/Suding adapter — read-only access check
+# AX1800M / Suding read-only Adapter Checker v0.2
 
-[Download the checker ZIP](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1) — **NOT firmware**.
+**This is a diagnostic tool, not firmware and not an installer.**
 
-This is not a firmware fix or an SSH installer. It reads the web identity and page,
-then checks whether SSH (22) or Telnet (23) already listens. No login attempt, upload,
-updater/recovery command, reboot or configuration change is performed.
+Run `probe-adapter.py` with Python 3.9+ while connected to the adapter's own Wi-Fi. The checker sends **only HTTP GET** for `/cgi-bin/getversion.cgi` and, when the device identity matches a documented sample, the root page `/`. It then reads unsolicited SSH/Telnet banners on ports 22 and 23, with **no login, credentials, payload, POST, OTA upload, reboot or configuration write**.
 
-1. Power the adapter from the computer/USB supply, separate from the car.
-2. Connect the computer's Wi-Fi to the adapter. No internet is needed.
-3. Extract this ZIP and open a terminal in its folder.
-4. Windows:
+## Download and start
 
-```powershell
-py probe-adapter.py
-```
+[Latest v0.2 checker release](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.2). Release ZIP, its SHA256SUMS file and source live separately from v0.5 RC2 firmware. To run from source, use the version-controlled [probe-adapter.py](probe-adapter.py).
 
-Mac/Linux:
+1. Power the adapter independently of the vehicle and connect your computer to the adapter's Wi-Fi.
+2. Unzip the v0.2 archive and open a terminal in its folder.
+3. On Windows run `py probe-adapter.py`; on macOS/Linux run `python3 probe-adapter.py`.
+4. By default the tool checks `192.168.50.100`. If needed use `--host 192.168.x.y`. Only numeric local IPv4 addresses are permitted.
+5. Send the resulting `harman-adapter-probe/REPORT.json` and `version.txt`, reviewing any network/serial information before sharing. `web-page.html` may contain private device details.
 
-```sh
-python3 probe-adapter.py
-```
+Optional: `python3 probe-adapter.py --dry-run` verifies argument handling without network access or file creation. `--out OUTPUT_FOLDER` changes the local output folder. It must **not exist** already, so prior diagnostics are never overwritten.
 
-Default IP is 192.168.50.100. If the adapter's actual management page uses another
-local IP, append `--host ACTUAL_IP`. Do not use the car's SSH address.
-Allow about 10–30 seconds. Send the resulting `harman-adapter-probe` folder,
-containing REPORT.json, version.txt and web-page.html. Files are saved on the computer.
-If it fails, send the error; it never falls back to uploading or flashing.
+## Recognized version signatures
 
-Only target identity accepted: AX1800M/suding, system 202603120956CA,
-protocol 20260109175612. A different identity stops further checks.
-Python 3.9+ and its standard library are sufficient.
+| Signature | Checker classification | RC2 firmware approval |
+| --- | --- | --- |
+| `AX1800M/suding`, system `202603120956CA`, protocol `20260109175612` | `pre_october` | **Not applicable** to this running protocol |
+| Same platform/custom/system, protocol `20261008165747` | `october_2026` | **Unverified candidate only** |
+| Any different/unknown version or product model | `unknown` | **Not authorized** |
 
-Why this is needed: the public vendor server is currently offering the October
-application; direct requests for this adapter's January/March installed versions
-did not return firmware. The exact pre-October installed application backup/rollback has not been established;
-a later pinned October stock application TAR is known. Olli's previous firmware is not included or relabeled here.
+If the optional `product_Model` field is reported, it must equal `v851se-yunlian-cp`. Missing model evidence is explicitly recorded and does not strengthen the compatibility assessment.
 
-## October OTA and the experimental v0.5 source
+**A matching version string is insufficient to approve RC2 installation.** The read-only checker cannot access or verify the stock `sdDongle` ELF SHA-256 `edff2ce4ae238d682fdc45be680d4cab919fc1be09bf398aaff4897289390bcb`, the complete stock image, bootloader/board revision, ABI or power-loss recovery. `REPORT.json` always sets `rc2_compatibility.install_authorized=false`. These require independent confirmation. There is no documented proven hard-brick recovery.
 
-The strict checker allowlist above accepts protocol `20260109175612` only. The same Mini Ultra 1-B **after** the October OTA was observed with protocol `20261008165747`. That post-OTA device can be rejected by the checker even when it is functioning correctly; **do not bypass the checker allowlist or infer firmware compatibility from a product label**. The [separate experimental v0.5 source](experimental/ax1800m-mini-ultra-october-relay/README.md) does not change checker behavior. The [separate RC2 test firmware](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains a mutating updater and is not qualified on hardware.
+## Output, safeguards and testing
+
+The checker saves `version.txt`, `REPORT.json` and—only for recognized identity—`web-page.html`; SSH and Telnet banners are fields of the JSON report. Unknown variants stop after identity and still save an actionable report. Network/HTTP failures produce `REPORT.json` with `status=ERROR`. HTTP redirects, nonlocal hostnames/IPs and replies over 2 MiB are rejected; proxies are disabled. No adapter files are modified.
+
+Offline unit tests are in [tests/test_probe_adapter.py](tests/test_probe_adapter.py) and run through GitHub Actions. These are host simulation tests; **device execution has not yet been independently verified**.
+
+Previous v0.1 release remains [archived](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1). It knows only the older protocol and can wrongly reject a correctly updated October adapter.
