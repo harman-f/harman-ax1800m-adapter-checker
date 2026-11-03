@@ -12,19 +12,11 @@ It targets the owner-reported `AX1800M` / `suding` / `v851se-yunlian-cp`, system
 
 Start with `python3 adapter.py dry-run` inside the extracted RC2 ZIP. That command is offline and safe. `probe` is GET-only identity lookup. **`check-only` is not read-only**; it uploads chunks into temporary updater storage. `flash` and `rollback` mutate the target and request reboot. Only run those after an explicit supervised compatibility/recovery review. The OCT stock rollback is **not** full bootloader recovery.
 
-[RC1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc1) is **superseded and must not be installed**: it used the wrong HU event GOT interception; the actual event dispatch calls directly into the handler. RC2 is the replacement, but also unqualified on hardware.
+## Public distribution policy
 
-## Historical downloads — original ZIP bytes retained
+Only the current experimental v0.5 RC2 application package and read-only checker v0.2 are offered as public downloads. Older test releases were superseded or targeted incompatible system/board variants; they are **not installation candidates**, and historical Git tags are retained for source provenance only. Archived release assets must not be confused with the current Mini Ultra 1-B system.
 
-| Archived package | Intended target | SHA-256 of unchanged ZIP |
-| --- | --- | --- |
-| [HW301 / CXZ521 / SEAT MU1409 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) | HW301, original app HW301_20250630126; system 20250320; vendor v129; one owner-reported vehicle result, not general validation | `89c936f5b6d4010d02570b069e1ee05c52b80a5e0229a3334183b95163f00579` |
-| [AX1800M / Leon MU1447 October v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) | **Older** system 202504180933CA and stock protocol 20261008165747; installation reported, not new Mini Ultra system | `b24600fea982667e896580b7b19e1712de96249da260cf5cb5f5f8ae33fcd1d6` |
-
-These packages have their own separate uploaders, rollback images and identity conditions. **Do not interchange** the two firmware families or use an old uploader with RC2.
-
-The [read-only checker v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1) is **not firmware** and strictly accepts an earlier owner pre-October protocol `20260109175612`; after the October OTA it may reject a functioning adapter.
-
+Consult the [stock-versus-v0.5 comparison](docs/ax1800m/STOCK-VS-V05.md) for an explicit feature-by-feature delta and unchanged defects. RC2 still has no hardware qualification and no proven hard-brick recovery.
 ## Copyright, source and evidence
 
 The current [AX1800M source](experimental/ax1800m-mini-ultra-october-relay/README.md) is published under its MIT/third-party source notices; its directory contains **no vendor TAR, patched binary or updater**. Separate downloadable RC2/legacy ZIPs contain proprietary manufacturer application binaries, which are **not relicensed** by the source license. Review the vendor's distribution terms before sharing or installing.

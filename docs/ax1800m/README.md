@@ -1,9 +1,10 @@
 # AX1800M / Suding / Mini Ultra 1-B: engineering documentation
 
-This is the canonical index for the **current v0.5 independent Type-111 source**, distinguished from the older download ZIPs and the strict read-only checker.
+This is the canonical index for the **current v0.5 independent Type-111 source**, distinguished from the separate firmware download and the strict read-only checker.
 
 | Document | Read when… |
 | --- | --- |
+| [STOCK-VS-V05.md](STOCK-VS-V05.md) | Reviewing exactly what changes relative to October stock firmware, what remains unchanged and what is unverified |
 | [CONTROL-PLANE.md](CONTROL-PLANE.md) | Understanding USB vs wireless, dynamic `showUI` maps URL, HU ingress/phone sender, cache/fallback/replay |
 | [TEST-MATRIX.md](TEST-MATRIX.md) | Checking what was actually exercised: previous car observation vs current host tests and MIPS build |
 | [KNOWN-ISSUES.md](KNOWN-ISSUES.md) | Diagnosing keepalive after teardown, `port_valid=0`, UI delivery and asynchronous completion |

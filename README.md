@@ -2,18 +2,18 @@
 
 **EXPERIMENTAL. Incorrect OTA firmware can disable an adapter.** Check [compatibility and recovery limitations](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md) before using a firmware release. Source-only code and firmware packages are different deliverables.
 
-## Downloads
+## Current downloads — only two maintained packages
 
-| Version | Purpose | Status |
+| Package | What it is | Validation |
 | --- | --- | --- |
-| [AX1800M Mini Ultra1-B **v0.5 RC2**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) | Application TAR, October stock app rollback, guarded uploader, source, checksums | **Current test candidate; offline PASS, NOT vehicle-tested** |
-| [AX1800M v0.5 RC1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc1) | Early control-hook experiment | **SUPERSEDED — DO NOT INSTALL** |
-| [AX1800M / Leon MU1447 October v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) | Older AX1800M system `202504180933CA` | Archived, **not** the new Mini Ultra system |
-| [HW301 / CXZ521 / SEAT MU1409 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) | Completely different HW301 hardware | Archived; **not interchangeable** |
-| [AX1800M read-only checker **v0.2**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.2) | Read-only pre-/post-October identification, network probe, separate RC2 assessment | **No install authorization; not firmware** |
+| [AX1800M Mini Ultra 1-B **v0.5 RC2**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) | Experimental *application* TAR with guarded uploader and matching October application rollback | Offline tests PASS; **no device or vehicle acceptance** |
+| [AX1800M read-only checker **v0.2**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.2) | GET-only identity/network diagnostic, no firmware flashing | Python 3.9/3.12 offline PASS; device execution pending |
 
-All downloadable ZIPs live in GitHub Releases, **not in the repository root**. The original two legacy firmware ZIPs and checker ZIP were migrated without changing their bytes. See the [release index and exact SHA-256 hashes](docs/ax1800m/RELEASES.md) and [firmware history](ADAPTER-FIRMWARE.md).
+Neither the checker nor model strings authorize installation. Download only from these current Release entries. Superseded and incompatible builds are not recommended or linked as downloads; historical Git tags remain provenance, not install instructions. See [release and checksum guidance](docs/ax1800m/RELEASES.md).
 
+## Stock October application versus experimental v0.5 RC2
+
+The source comparison is documented in [**Stock vs v0.5 feature matrix**](docs/ax1800m/STOCK-VS-V05.md). In short: the October stock application supplies the existing wireless CarPlay main-display path, while the custom relay adds a separate Type-111 cockpit video path, HU presentation-command observation and bounded fallback/replay. v0.5 **does not** repair or replace the stock Wi-Fi/Bluetooth transport, keepalive or `port_valid=0` reconnect path. The newly added command bridge has **not** been validated on a phone or in the car.
 ## AX1800M v0.5 engineering focus
 
 The same MHI2/MU1440 Apple Maps ETA, map-surface and maneuver settings apply correctly over direct USB, but apparently not through the AX1800M wireless dongle. Working Type-111 **video** does not establish working HU→phone **control** forwarding.
