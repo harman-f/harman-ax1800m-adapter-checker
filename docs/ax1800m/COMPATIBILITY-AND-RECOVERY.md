@@ -17,7 +17,7 @@ The product string `v851se` and the retail name alone cannot establish a SoC, bo
 
 ## Three independent deliverables
 
-**1. Read-only checker:** `probe-adapter.py` and old checker ZIP strictly accept the earlier protocol `20260109175612`; an adapter already on the October OTA may be rejected by this older checker. That rejection is **not** proof of failure or incompatibility. Do not bypass the allowlist to install firmware.
+**1. Read-only checker:** `probe-adapter.py` v0.2 recognizes the studied pre-October `20260109175612` and October `20261008165747` protocols, records identity, and separates firmware recognition from RC2 installation assessment. Its `install_authorized` flag is always false: reported versions cannot verify stock ELF hash, bootloader/board, firmware archive or recovery. Archived checker v0.1 accepts only the earlier protocol and can reject a healthy October unit.
 
 **2. Historical hardware-specific ZIPs:** The [HW301/CXZ521 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) and [AX1800M/Leon MU1447 v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) are archived firmware experiments for different hardware/system revisions, with their own rollbacks and uploaders. Their included binaries remain unchanged; they are **not** Mini Ultra v0.5 builds and cannot be transplanted.
 

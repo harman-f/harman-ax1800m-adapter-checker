@@ -1,0 +1,75 @@
+name: AX1800M read-only checker v0.2 tests and release
+
+on:
+  push:
+    branches: [main, 'work/ax1800m-checker-v02-*']
+    paths:
+      - 'probe-adapter.py'
+      - 'tests/test_probe_adapter.py'
+      - 'PROBE-README.md'
+      - '.github/workflows/ax1800m-checker.yml'
+      - 'README.md'
+      - 'docs/ax1800m/RELEASES.md'
+      - 'docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md'
+  pull_request:
+    paths:
+      - 'probe-adapter.py'
+      - 'tests/test_probe_adapter.py'
+      - 'PROBE-README.md'
+      - '.github/workflows/ax1800m-checker.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Syntax and unit tests (no adapter access)
+        run: |
+          python -m py_compile probe-adapter.py tests/test_probe_adapter.py
+          python -m unittest discover -s tests -p 'test_probe_adapter.py' -v
+          python probe-adapter.py --dry-run
+          echo "CHECKER_V02_OFFLINE_PASS"
+
+  publish:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package script, instructions and SHA-256 without device operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/Harman-AX1800M-readonly-probe-v0.2
+          cp probe-adapter.py PROBE-README.md dist/Harman-AX1800M-readonly-probe-v0.2/
+          (cd dist && zip -q -r -X Harman-AX1800M-readonly-probe-v0.2.zip Harman-AX1800M-readonly-probe-v0.2)
+          (cd dist && sha256sum Harman-AX1800M-readonly-probe-v0.2.zip > SHA256SUMS.txt)
+          unzip -l dist/Harman-AX1800M-readonly-probe-v0.2.zip
+      - name: Publish immutable named v0.2 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=ax1800m-readonly-checker-v0.2
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite"
+            exit 0
+          fi
+          gh release create "$tag" dist/Harman-AX1800M-readonly-probe-v0.2.zip dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AX1800M read-only checker v0.2" \
+            --notes "Read-only diagnostic, not firmware. Recognizes pre-October and October protocol. A recognized version never authorizes RC2 flashing. Tested offline with Python 3.9/3.12." \
+            --prerelease
