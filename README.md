@@ -1,29 +1,29 @@
-# Wireless CarPlay adapters: checker, historic images and AX1800M relay
+# Wireless CarPlay adapter research, checker and firmware releases
 
-**Experimental research. Source builds are not installable firmware.** Incorrect OTA images can disable an adapter. Read [compatibility and recovery limitations](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md) before attempting any update.
+**EXPERIMENTAL. Incorrect OTA firmware can disable an adapter.** Check [compatibility and recovery limitations](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md) before using a firmware release. Source-only code and firmware packages are different deliverables.
 
-## Find the right component
+## Downloads
 
-| Component | Contents | Verified status |
+| Version | Purpose | Status |
 | --- | --- | --- |
-| [AX1800M Mini Ultra 1-B independent relay v0.5](experimental/ax1800m-mini-ultra-october-relay/README.md) | Source, host regression tests, MIPS32r2 build recipe; **no firmware TAR or flasher** | Offline build/tests; **v0.5 has not been run on hardware** |
-| [Read-only AX1800M identity checker](PROBE-README.md) | Read-only Python probe and [checker ZIP](Harman-AX1800M-readonly-probe-v0.1.zip) | Strict allowlist for pre-October-OTA protocol `20260109175612`; does not update |
-| [Legacy experimental firmware packages](ADAPTER-FIRMWARE.md) | Two separately pinned, previously published ZIPs for **different** hardware/version targets | Individual, historic qualification only; **not** v0.5 |
-| [HW301 / CXZ521 / SEAT MU1409 package](HW301-CXZ521-SEAT-MU1409-v0.1.zip) | Legacy v0.1 candidate and its own rollback/uploader | Hardware-specific; not interchangeable with AX1800M |
-| [AX1800M / Suding / Leon MU1447 v0.2 package](AX1800M-Suding-Leon-MU1447-October-v0.2.zip) | Legacy v0.2 candidate and its own rollback/uploader | Pinned older **system** version; not a Mini Ultra v0.5 build |
+| [AX1800M Mini Ultra1-B **v0.5 RC2**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) | Application TAR, October stock app rollback, guarded uploader, source, checksums | **Current test candidate; offline PASS, NOT vehicle-tested** |
+| [AX1800M v0.5 RC1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc1) | Early control-hook experiment | **SUPERSEDED — DO NOT INSTALL** |
+| [AX1800M / Leon MU1447 October v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) | Older AX1800M system `202504180933CA` | Archived, **not** the new Mini Ultra system |
+| [HW301 / CXZ521 / SEAT MU1409 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) | Completely different HW301 hardware | Archived; **not interchangeable** |
+| [AX1800M read-only checker v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1) | Pre-October owner sample identity/network probe | **Not firmware; no installer** |
+
+All downloadable ZIPs live in GitHub Releases, **not in the repository root**. The original two legacy firmware ZIPs and checker ZIP were migrated without changing their bytes. See the [release index and exact SHA-256 hashes](docs/ax1800m/RELEASES.md) and [firmware history](ADAPTER-FIRMWARE.md).
 
 ## AX1800M v0.5 engineering focus
 
-The direct USB connection between MHI2 and iPhone already applies the cockpit's Apple Maps URL/menu settings. Through a wireless AX1800M dongle the Type-111 video stream has been observed, but **changes to ETA, map surface and maneuver position do not reliably appear**. A dongle terminates the car-facing and iPhone-facing sessions, so working video does not establish a working control bridge.
+The same MHI2/MU1440 Apple Maps ETA, map-surface and maneuver settings apply correctly over direct USB, but apparently not through the AX1800M wireless dongle. Working Type-111 **video** does not establish working HU→phone **control** forwarding.
 
-v0.5 instruments the **actual HU binary-plist decoder** (not the ineffective eventMsgProc GOT reference), observes the stock phone command sender, retains the latest HU-owned `showUI/stopUI` and `updateViewArea`, and offers a bounded delayed submission and next-phone-session replay. It prefers the HU's `initialURL` to the prior constant fallback. This is source-level behavior: **no vehicle, phone ACK, OTA installation or reconnect fix is claimed for v0.5**.
+The [current public v0.5 source](experimental/ax1800m-mini-ultra-october-relay/README.md) intercepts the actual HU binary-plist decoder, not the ineffective `eventMsgProc` GOT hypothesis in RC1. It retains HU-owned `showUI/stopUI` and `updateViewArea` commands, observes the stock phone sender, and implements a bounded 150-ms fallback/replay. The separate RC2 application package was built from this corrected source and tested **offline only**. There is **no recorded iPhone UI completion or vehicle acceptance for v0.5**.
 
-Start here: [AX1800M documentation index](docs/ax1800m/README.md), [control-plane design](docs/ax1800m/CONTROL-PLANE.md), [test/evidence matrix](docs/ax1800m/TEST-MATRIX.md), and [open bugs](docs/ax1800m/KNOWN-ISSUES.md).
+Read [control-plane design](docs/ax1800m/CONTROL-PLANE.md), [test matrix](docs/ax1800m/TEST-MATRIX.md), [known issues](docs/ax1800m/KNOWN-ISSUES.md) and [compatibility/recovery](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md).
 
-## Device identification and safety
+## Identity and recovery boundary
 
-- The studied owner-supplied *Mini Ultra 1-B* sample is `platform=AX1800M`, `custom=suding`, `product_Model=v851se-yunlian-cp`, `system_version=202603120956CA`. Following October OTA, protocol was observed as `20261008165747`; the earlier checker targets `20260109175612`.
-- The experimental source specifically targets October `sdDongle` catalog `ax_202610081657`, pinned by **exact binary hash and entry-point ABI**. The retail model name alone cannot establish compatibility.
-- No current package here is a tested AX1800M v0.5 OTA or full hard-brick recovery image. Do not transplant the old ZIPs or bypass identity checks.
+The owner-observed Mini Ultra 1-B sample reports `AX1800M/suding/v851se-yunlian-cp`, system `202603120956CA`, and after the October OTA protocol `20261008165747`. Exact stock catalog `ax_202610081657`, executable SHA-256 `edff2ce4ae238d682fdc45be680d4cab919fc1be09bf398aaff4897289390bcb`. Retail product names do not establish PCB/boot-ROM equivalence. An application rollback only works if the updater remains reachable; no complete hard-brick recovery is proven.
 
-Source license and photo rights are explained [here](experimental/ax1800m-mini-ultra-october-relay/README.md#license-and-publication-scope).
+The [read-only checker instructions](PROBE-README.md) refer to an older strict pre-OTA protocol allowlist and are not a firmware installation guide. Third-party vendor binaries in release archives are proprietary inputs; the source MIT license does not relicense them. Owner-authorized photographs in the source tree are not MIT-licensed.
