@@ -702,7 +702,7 @@ static void *worker(void *arg) {
     }else aesctr_update(dec,body,(int)len,body);
     frames++;if(!cfglen)continue;
     if(!primed) {
-      primed=seat_has_idr(body,len);
+      primed=stream_has_h264_idr(body,len);
       if(!primed){if(frames%120==1)log_event("stage=keyframe id=%llu submit_rc=%d",r->relay_id,send_command(r,"forceKeyFrame",0));continue;}
     }
     ForwardResult sent=forward(r,0,body,len,0);
