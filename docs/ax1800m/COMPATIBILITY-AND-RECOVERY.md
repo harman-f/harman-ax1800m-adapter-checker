@@ -15,18 +15,17 @@
 
 The product string `v851se` and the retail name alone cannot establish a SoC, boot ROM, USB recovery device, hardware revision or flash layout. The exact ELF hash and relevant GOT pointers are preconditions for this source. The matching vendor binary and stock TAR are **not distributed** in the source directory.
 
-## Three independent deliverables
+## Two current, independent deliverables
 
-**1. Read-only checker:** `probe-adapter.py` v0.2 recognizes the studied pre-October `20260109175612` and October `20261008165747` protocols, records identity, and separates firmware recognition from RC2 installation assessment. Its `install_authorized` flag is always false: reported versions cannot verify stock ELF hash, bootloader/board, firmware archive or recovery. Archived checker v0.1 accepts only the earlier protocol and can reject a healthy October unit.
+**1. Read-only checker v0.2:** `probe-adapter.py` recognizes the studied pre-October `20260109175612` and October `20261008165747` protocols, records identity and reports an *assessment*, never permission to flash. `install_authorized` is always false: an HTTP version string cannot verify stock ELF hash, board/bootloader revision, runtime ABI, the installed archive or recovery.
 
-**2. Historical hardware-specific ZIPs:** The [HW301/CXZ521 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) and [AX1800M/Leon MU1447 v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) are archived firmware experiments for different hardware/system revisions, with their own rollbacks and uploaders. Their included binaries remain unchanged; they are **not** Mini Ultra v0.5 builds and cannot be transplanted.
+**2. Experimental v0.5 RC2 application:** The [source directory](../../experimental/ax1800m-mini-ultra-october-relay/README.md) contains no proprietary firmware. A separate [RC2 test prerelease](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) supplies the offline-verified application TAR, guarded updater and matching October *application* rollback. It is **not** whole-device factory firmware, proof of safe loader operation or completed vehicle acceptance.
 
-**3. Current independent v0.5:** The [source directory](../../experimental/ax1800m-mini-ultra-october-relay/README.md) has no firmware. A separate [RC2 test prerelease](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains an offline-verified October application TAR, guarded uploader and matching October stock application rollback. This is **not** whole-device firmware, safe-loader proof or completed vehicle acceptance.
-
+Older binaries targeted different boards and system revisions and must never be treated as interchangeable with the current Mini Ultra 1-B. There are no maintained public downloads for those builds. The exact functional difference from stock is in [STOCK-VS-V05.md](STOCK-VS-V05.md).
 ## Before any future installation
 
 Confirm model, running system/protocol, stock OTA archive SHA-256, actual `sdDongle` SHA-256, expected library imports/hook slots, target boot path, exact installer behavior, rollback and power-loss failure modes. Test on a parked vehicle with a retained recovery plan, never by experimenting with the two old ZIPs or overriding checks.
 
 An HTTP-based firmware rollback cannot rescue a device that no longer boots enough to provide the updater. There is **no verified full hard-brick USB/boot-ROM recovery procedure** for the studied PCB in this repository. Avoid claiming one based on an unconfirmed chip family.
 
-See [ADAPTER-FIRMWARE.md](../../ADAPTER-FIRMWARE.md) for historic binary package hashes and [PROBE-README.md](../../PROBE-README.md) for the old checker scope.
+See [ADAPTER-FIRMWARE.md](../../ADAPTER-FIRMWARE.md) for current package provenance and [PROBE-README.md](../../PROBE-README.md) for the checker scope.

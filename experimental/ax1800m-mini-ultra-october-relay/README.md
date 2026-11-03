@@ -2,7 +2,7 @@
 
 **Current source version: v0.5 · code and offline tests only · NOT an OTA image or validated device release.**
 
-This directory is the public source workspace for the pinned October `sdDongle` ABI. It contains no patched vendor executable, stock rollback TAR, uploader or phone logs. Historical firmware ZIPs are preserved unchanged in [GitHub Releases](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy). A separate [v0.5 RC2 test package](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains proprietary vendor inputs outside this source directory.
+This directory is the public source workspace for the pinned October `sdDongle` ABI. It contains no patched vendor executable, stock rollback TAR, uploader or phone logs. Earlier board-specific firmware downloads have been retired from the public release index. A separate [v0.5 RC2 test package](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains proprietary vendor inputs outside this source directory.
 
 ## Implemented features in source
 
@@ -34,7 +34,7 @@ SOURCE-MANIFEST.sha256        Integrity of published sources, docs and photos
 assets/                       Owner-permitted photographs; not MIT-licensed
 ```
 
-Detailed engineering notes are in [../../docs/ax1800m](../../docs/ax1800m/README.md).
+Detailed engineering notes and a [feature-by-feature comparison with October stock](../../docs/ax1800m/STOCK-VS-V05.md) are in [../../docs/ax1800m](../../docs/ax1800m/README.md).
 
 ## Exact target and observations
 

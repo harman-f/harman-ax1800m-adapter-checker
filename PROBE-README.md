@@ -34,4 +34,4 @@ The checker saves `version.txt`, `REPORT.json` and—only for recognized identit
 
 Offline unit tests are in [tests/test_probe_adapter.py](tests/test_probe_adapter.py) and run through GitHub Actions. These are host simulation tests; **device execution has not yet been independently verified**.
 
-Previous v0.1 release remains [archived](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1). It knows only the older protocol and can wrongly reject a correctly updated October adapter.
+Earlier checker builds are superseded and are no longer offered as public downloads. Use v0.2: the earlier allowlist could reject a correctly updated October adapter.
