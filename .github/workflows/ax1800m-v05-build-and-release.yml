@@ -71,7 +71,7 @@ jobs:
           retention-days: 30
   publish-test-prerelease:
     needs: offline-package
-    if: ${{ false }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/work/ax1800m-v05-release-prep-20261103' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
