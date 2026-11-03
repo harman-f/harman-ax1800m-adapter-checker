@@ -1,0 +1,39 @@
+name: AX1800M v0.5 release input audit
+on:
+  push:
+    branches: [work/ax1800m-v05-release-prep-20261103]
+    paths:
+      - '.github/workflows/ax1800m-v05-input-audit.yml'
+      - 'release-prep/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-public-legacy-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enumerate previous publicly stored AX1800M package inputs without extracting arbitrary paths
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import zipfile,hashlib,os
+          z='AX1800M-Suding-Leon-MU1447-October-v0.2.zip'
+          with zipfile.ZipFile(z) as f:
+              for m in f.infolist():
+                  if m.is_dir(): continue
+                  name=m.filename
+                  interesting=any(k in name.lower() for k in ('rollback','.tar','build.py','.so','release','readme','patch','sdDongle','vendor','adapter','manifest'))
+                  if interesting:
+                      print('ZIP_MEMBER',name,'SIZE',m.file_size)
+                      if m.file_size<5000000 and (name.lower().endswith('.tar') or name.lower().endswith('build.py')):
+                          data=f.read(m)
+                          print('ZIP_MEMBER_SHA256',hashlib.sha256(data).hexdigest())
+                          if name.lower().endswith('.tar'):
+                              import io,tarfile
+                              try:
+                                  with tarfile.open(fileobj=io.BytesIO(data)) as tf:
+                                      print('TAR_MEMBERS', name,[(m.name,m.size) for m in tf.getmembers()])
+                              except tarfile.TarError: print('TAR_NOT_READABLE',name)
+          PY
