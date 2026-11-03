@@ -1,0 +1,57 @@
+name: Archive original legacy adapter download ZIPs
+on:
+  push:
+    branches: [work/legacy-assets-to-releases-20261103]
+    paths:
+      - '.github/workflows/archive-legacy-download-zips.yml'
+permissions:
+  contents: write
+jobs:
+  verify-and-migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify unchanged original historic firmware ZIP hashes and archive integrity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo '89c936f5b6d4010d02570b069e1ee05c52b80a5e0229a3334183b95163f00579  HW301-CXZ521-SEAT-MU1409-v0.1.zip' | sha256sum -c -
+          echo 'b24600fea982667e896580b7b19e1712de96249da260cf5cb5f5f8ae33fcd1d6  AX1800M-Suding-Leon-MU1447-October-v0.2.zip' | sha256sum -c -
+          python3 - <<'PY'
+          import zipfile,pathlib
+          for fn in ['HW301-CXZ521-SEAT-MU1409-v0.1.zip','AX1800M-Suding-Leon-MU1447-October-v0.2.zip','Harman-AX1800M-readonly-probe-v0.1.zip']:
+              with zipfile.ZipFile(fn) as z:
+                  assert z.testzip() is None
+                  assert z.namelist()
+                  assert all(not p.startswith(('/','\\')) and '..' not in pathlib.PurePosixPath(p).parts for p in z.namelist())
+                  print('LEGACY_ZIP_VERIFIED',fn,'members',len(z.namelist()))
+          PY
+      - name: Archive legacy firmware ZIPs as separate historical prereleases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/legacy-hw /tmp/legacy-ax /tmp/legacy-checker
+          sha256sum HW301-CXZ521-SEAT-MU1409-v0.1.zip > /tmp/legacy-hw/SHA256SUMS.txt
+          sha256sum AX1800M-Suding-Leon-MU1447-October-v0.2.zip > /tmp/legacy-ax/SHA256SUMS.txt
+          sha256sum Harman-AX1800M-readonly-probe-v0.1.zip > /tmp/legacy-checker/SHA256SUMS.txt
+          if gh release view 'hw301-seat-mu1409-v0.1-legacy' --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo 'Existing legacy HW301 release; refuse overwrite'; exit 1; fi
+          gh release create 'hw301-seat-mu1409-v0.1-legacy' \
+            HW301-CXZ521-SEAT-MU1409-v0.1.zip /tmp/legacy-hw/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title 'ARCHIVED — HW301 CXZ521 SEAT MU1409 v0.1' \
+            --notes 'Historical experimental HW301/CXZ521 firmware with separate rollback and uploader. Not AX1800M; do NOT install on Mini Ultra or a different hardware/system version. Preserved unchanged from the previously public root ZIP; historic owner report is not general hardware qualification. Vendor binaries are proprietary and not covered by the source license.'
+          if gh release view 'ax1800m-leon-mu1447-v0.2-legacy' --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo 'Existing legacy AX release; refuse overwrite'; exit 1; fi
+          gh release create 'ax1800m-leon-mu1447-v0.2-legacy' \
+            AX1800M-Suding-Leon-MU1447-October-v0.2.zip /tmp/legacy-ax/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title 'ARCHIVED — AX1800M Leon MU1447 October v0.2 (OLD SYSTEM)' \
+            --notes 'Historical AX1800M/Suding October firmware for system 202504180933CA, not the newer Mini Ultra 1-B system 202603120956CA. Do NOT substitute it for v0.5 or install by product label. Preserved unchanged (SHA-256 in attached file). Vendor binaries are proprietary; application rollback is not boot-ROM recovery.'
+          if gh release view 'ax1800m-readonly-checker-v0.1' --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo 'Existing checker release; refuse overwrite'; exit 1; fi
+          gh release create 'ax1800m-readonly-checker-v0.1' \
+            Harman-AX1800M-readonly-probe-v0.1.zip /tmp/legacy-checker/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title 'AX1800M read-only identity checker v0.1 — NOT FIRMWARE' \
+            --notes 'Read-only identity/network probe ZIP. This is NOT an OTA, firmware repair, or binary. Strict pre-October protocol allowlist; it can reject later October versions. Contains no flasher. User logs may contain private information and should not be shared publicly without review.'
