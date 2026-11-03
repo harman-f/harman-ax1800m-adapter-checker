@@ -111,7 +111,7 @@ def main():
     src_dest=bundle/"source";src_dest.mkdir()
     source_paths=["LICENSE","THIRD_PARTY_NOTICES.md","README.md","build.py",
                   "src/relay.c","src/vendor_abi.h","src/hu_presentation_diag.h",
-                  "src/geometry.h","src/seat_profile.h","src/initial_profile.h",
+                  "src/geometry.h","src/initial_profile.h",
                   "tests/relay_test.c","tests/geometry_test.c","tests/hu_presentation_diag_test.c"]
     for name in source_paths:
         target=src_dest/name;target.parent.mkdir(parents=True,exist_ok=True)
