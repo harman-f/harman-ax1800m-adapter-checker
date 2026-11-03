@@ -1,0 +1,23 @@
+name: Repair RC2 prerelease metadata (one-shot)
+on:
+  push:
+    branches: [work/firmware-release-index-cleanup-20261103]
+    paths: ['.github/workflows/rc2-release-metadata.yml']
+permissions:
+  contents: write
+jobs:
+  correct-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Correct the RC2 title and compatibility warning
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view ax1800m-miniultra-v0.5-rc2 --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release edit ax1800m-miniultra-v0.5-rc2 \
+            --repo "$GITHUB_REPOSITORY" \
+            --title 'AX1800M Mini Ultra1-B v0.5 RC2 — UNTESTED corrected-ingress firmware' \
+            --notes 'CURRENT EXPERIMENTAL TEST CANDIDATE — NOT VEHICLE-TESTED. RC2 supersedes RC1, whose attempted eventMsgProc GOT interception was ineffective because stock calls the event processor directly. RC2 is built from the corrected main source, intercepting the real HU plist decoder, with a delayed stock-first command bridge and car-owned presentation replay. Offline host/ASan/UBSan, pinned Zig MIPS32r2 build, exact October stock patch, package archive checks and mock CGI updater tests PASS. Actual dongle runtime, iPhone UI acceptance, keepalive and reconnect issues remain unverified. Requires exact AX1800M/Suding October application baseline; not universal firmware or boot-ROM recovery. The ZIP includes a guarded uploader, application candidate and exact October application rollback. Vendor binaries remain proprietary, outside the source MIT license.' \
+            --prerelease
+          gh release view ax1800m-miniultra-v0.5-rc2 --repo "$GITHUB_REPOSITORY" --json name,tagName,isPrerelease

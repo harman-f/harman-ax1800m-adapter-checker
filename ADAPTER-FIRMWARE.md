@@ -1,46 +1,32 @@
-# Experimental wireless CarPlay adapter packages
+# Adapter firmware downloads, provenance and limitations
 
-**HIGHLY EXPERIMENTAL. USE AT YOUR OWN RISK. NO WARRANTY.** Incorrect firmware can disable the adapter. The maintainers/contributors accept no liability to the extent permitted by applicable law. These packages modify the adapter, not the MHI2 or cockpit firmware. An existing compatible wired cockpit-map implementation is required.
+**HIGHLY EXPERIMENTAL — NO WARRANTY.** Firmware can disable a dongle. Release assets modify the adapter, not the MHI2 or virtual cockpit. No automatic compatibility or hard-brick recovery is implied.
 
-Both ZIPs include the candidate binary, stock rollback, uploader, instructions, source and retained validation. Hardware/platform and installed versions must match. These are separate packages and are **not interchangeable**. Do not bypass identity/hash checks.
+## Current AX1800M Mini Ultra1-B candidate
 
-| Package | Exact intended target | Test status |
+[**v0.5 RC2 — experimental GitHub prerelease**](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2): application candidate `ax_independent_relay_v05_rc2.tar`, exact October application rollback, guarded Python updater, corresponding source snapshot, offline test receipts and SHA-256 manifest.
+
+It targets the owner-reported `AX1800M` / `suding` / `v851se-yunlian-cp`, system `202603120956CA`, with pinned stock October catalog `ax_202610081657` and stock `sdDongle` SHA-256 `edff2ce4ae238d682fdc45be680d4cab919fc1be09bf398aaff4897289390bcb`. These are not universal compatibility claims. The actual installed executable/hook ABI must be confirmed separately.
+
+**Qualification:** v0.5 corrected the HU→iPhone `showUI` control-hook approach (actual HU plist decoder, stock-first send, bounded delayed fallback, HU-owned `initialURL` and replay). CI passed Linux host, sanitizer, Zig MIPS cross-build, exact stock patch preimages, application TAR, release ZIP, 23 mocked CGI/updater tests and network-free `dry-run`. **It has not been installed or tested on the actual dongle or with an iPhone.** Separate keepalive and `port_valid=0` reconnect defects remain open.
+
+Start with `python3 adapter.py dry-run` inside the extracted RC2 ZIP. That command is offline and safe. `probe` is GET-only identity lookup. **`check-only` is not read-only**; it uploads chunks into temporary updater storage. `flash` and `rollback` mutate the target and request reboot. Only run those after an explicit supervised compatibility/recovery review. The OCT stock rollback is **not** full bootloader recovery.
+
+[RC1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc1) is **superseded and must not be installed**: it used the wrong HU event GOT interception; the actual event dispatch calls directly into the handler. RC2 is the replacement, but also unqualified on hardware.
+
+## Historical downloads — original ZIP bytes retained
+
+| Archived package | Intended target | SHA-256 of unchanged ZIP |
 | --- | --- | --- |
-| [HW301 / CXZ521 / SEAT MU1409 v0.1](HW301-CXZ521-SEAT-MU1409-v0.1.zip) | HW301/CXZ521; reference original APP HW301_20250630126, system 20250320; custom app based on vendor v129 | One vehicle's operator reported working wireless CarPlay and cockpit maps. Not universal acceptance. |
-| [AX1800M / Suding / Leon MU1447 / October v0.2](AX1800M-Suding-Leon-MU1447-October-v0.2.zip) | platform AX1800M, custom suding, product v851se-yunlian-cp, system 202504180933CA, stock protocol 20261008165747 | October candidate with r6 uploader. Installation reported complete; do not infer visible vehicle acceptance from flashing alone. |
+| [HW301 / CXZ521 / SEAT MU1409 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) | HW301, original app HW301_20250630126; system 20250320; vendor v129; one owner-reported vehicle result, not general validation | `89c936f5b6d4010d02570b069e1ee05c52b80a5e0229a3334183b95163f00579` |
+| [AX1800M / Leon MU1447 October v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) | **Older** system 202504180933CA and stock protocol 20261008165747; installation reported, not new Mini Ultra system | `b24600fea982667e896580b7b19e1712de96249da260cf5cb5f5f8ae33fcd1d6` |
 
-**Neither package matches the newer AX1800M/Suding system 202603120956CA / protocol 20260109175612 covered by this repository's read-only probe.** No exact firmware fix for that newer combination is included.
+These packages have their own separate uploaders, rollback images and identity conditions. **Do not interchange** the two firmware families or use an old uploader with RC2.
 
-## Current AX1800M v0.5 independent relay — source only
+The [read-only checker v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-readonly-checker-v0.1) is **not firmware** and strictly accepts an earlier owner pre-October protocol `20260109175612`; after the October OTA it may reject a functioning adapter.
 
-The [AX1800M / Suding v0.5 source](experimental/ax1800m-mini-ultra-october-relay/README.md) adds the wireless cockpit control-plane bridge: qualified HU `showUI/stopUI`, `updateViewArea` and `forceKeyFrame` observation, a bounded delayed fallback for commands not submitted by the stock sender, the HU-provided `initialURL`, and latest-HU-intent replay for a new phone Type-111 session. **This is source and offline test code, NOT a firmware image or uploader.** The previously published ZIP checksums below have **not** changed. No v0.5 on-device or iPhone-ACK acceptance has been established.
+## Copyright, source and evidence
 
-See the [current evidence matrix](docs/ax1800m/TEST-MATRIX.md) and [open wireless/reconnect defects](docs/ax1800m/KNOWN-ISSUES.md). The previous v0.4 owner test observed video but the keepalive drop and `port_valid=0` subsequent SETUP remain open.
+The current [AX1800M source](experimental/ax1800m-mini-ultra-october-relay/README.md) is published under its MIT/third-party source notices; its directory contains **no vendor TAR, patched binary or updater**. Separate downloadable RC2/legacy ZIPs contain proprietary manufacturer application binaries, which are **not relicensed** by the source license. Review the vendor's distribution terms before sharing or installing.
 
-## Historical source-only October relay experiment for a Mini Ultra 1-B
-
-The [Carlinkit MINI Ultra 1-B October relay source experiment](./experimental/ax1800m-mini-ultra-october-relay/README.md) is a separate, source-only contribution. It does not replace or modify either downloadable package above, and does not include an OTA TAR, patched application, rollback image, or uploader. Its expected vendor input is catalog `ax_202610081657` (stock OTA TAR SHA-256 `13ca438ad4db00bbac0fa4650419df110bf17611a69525409261318a8bbade86`; pinned `sdDongle` SHA-256 `edff2ce4ae238d682fdc45be680d4cab919fc1be09bf398aaff4897289390bcb`). The current v0.5 source retains an owner-reported sample from one adapter labeled Mini Ultra 1-B: `AX1800M / suding / v851se-yunlian-cp`, system `202603120956CA`, protocol `20261008165747`, catalog `ax_202610081657`. These observed values are not defaults, and neither the retail label nor OTA catalog offer establishes another unit's installed executable or compatibility.
-
-On one owner-reported Skoda MHI2 / `MHI2_ER_SKG13_P4526_MU1440` setup, CarPlay video/configuration, navigation symbols, and zoom were observed; one menu exit did not immediately disconnect. v0.4 corrected a source-level teardown classification error (`CFDictionary` versus stream array). v0.5 adds source-level HU command capture and replay but has no vehicle result. Neither change proves the cause of the observed menu-exit/keepalive behavior; spontaneous keepalive disconnects remain unresolved. This single report does not establish universal vehicle support or stability. HU geometry is dynamic, but firmware hooks and ABI are tied to the pinned October executable.
-
-## Use
-
-Download and extract the entire matching ZIP. Read its README before connecting or flashing. Keep IMAGES.json and the firmware folder together with the uploader; keep the rollback available. Start with the local `dry-run`, then `probe` to confirm the adapter identity. Use the package's own install and rollback commands. Do not mix files from older packages.
-
-- HW301 package: `sh adapter.sh dry-run` on Mac/Linux. Read README.md and RECOVERY.md for the exact procedure and compatibility limits.
-- AX1800M October package: `py adapter-october-r6.py dry-run` on Windows, or `python3 adapter-october-r6.py dry-run` on Mac/Linux. This is the r6 October package, not the earlier September candidate.
-
-The original read-only `probe-adapter.py` remains read-only. The separately downloaded firmware uploaders have explicit flash/rollback commands that do write to the adapter.
-
-## Provenance
-
-The HW301 native proxy reuses [kamgurgul/mib2q-carplay](https://github.com/kamgurgul/mib2q-carplay/tree/cf8ab2effb24292025e7648bb79244fed3805741/dongle/hw301). The AX1800M package retains its upstream source/reference and patch evidence, including [OMKE/wireless-carplay-virtual-cockpit](https://github.com/OMKE/wireless-carplay-virtual-cockpit). See the included licenses and build notes. Vendor binaries remain proprietary inputs; the project source license does not relicense them.
-
-These download copies use neutral device labels and omit personal tester references/local account paths. Candidate and rollback firmware bytes are unchanged from the original prepared packages. Archive-level checksums differ because documentation and folder names were cleaned up; internal firmware hashes remain in IMAGES.json.
-
-## Download checksums (SHA-256)
-
-```text
-89c936f5b6d4010d02570b069e1ee05c52b80a5e0229a3334183b95163f00579  HW301-CXZ521-SEAT-MU1409-v0.1.zip
-b24600fea982667e896580b7b19e1712de96249da260cf5cb5f5f8ae33fcd1d6  AX1800M-Suding-Leon-MU1447-October-v0.2.zip
-```
+Research lineage includes [OMKE/wireless-carplay-virtual-cockpit](https://github.com/OMKE/wireless-carplay-virtual-cockpit) and for the unrelated HW301 design [kamgurgul/mib2q-carplay](https://github.com/kamgurgul/mib2q-carplay). See [full release index](docs/ax1800m/RELEASES.md), [testing](docs/ax1800m/TEST-MATRIX.md) and [recovery](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md).

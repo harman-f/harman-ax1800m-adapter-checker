@@ -19,9 +19,9 @@ The product string `v851se` and the retail name alone cannot establish a SoC, bo
 
 **1. Read-only checker:** `probe-adapter.py` and old checker ZIP strictly accept the earlier protocol `20260109175612`; an adapter already on the October OTA may be rejected by this older checker. That rejection is **not** proof of failure or incompatibility. Do not bypass the allowlist to install firmware.
 
-**2. Historical hardware-specific ZIPs:** The HW301/CXZ521 and AX1800M/Leon MU1447 v0.1/v0.2 packages are older, differently pinned firmware experiments with their own rollback/updaters. Their included binaries remain unchanged; they are **not** Mini Ultra v0.5 builds and cannot be transplanted.
+**2. Historical hardware-specific ZIPs:** The [HW301/CXZ521 v0.1](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/hw301-seat-mu1409-v0.1-legacy) and [AX1800M/Leon MU1447 v0.2](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy) are archived firmware experiments for different hardware/system revisions, with their own rollbacks and uploaders. Their included binaries remain unchanged; they are **not** Mini Ultra v0.5 builds and cannot be transplanted.
 
-**3. Current independent v0.5:** A source directory. `build/libSdHOct.so` is a development shared object, **not** a complete install image, updater or rollback package. Source compile and host tests do not establish safe loader behavior.
+**3. Current independent v0.5:** The [source directory](../../experimental/ax1800m-mini-ultra-october-relay/README.md) has no firmware. A separate [RC2 test prerelease](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains an offline-verified October application TAR, guarded uploader and matching October stock application rollback. This is **not** whole-device firmware, safe-loader proof or completed vehicle acceptance.
 
 ## Before any future installation
 

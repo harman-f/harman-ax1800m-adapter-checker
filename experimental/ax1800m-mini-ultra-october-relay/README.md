@@ -2,7 +2,7 @@
 
 **Current source version: v0.5 · code and offline tests only · NOT an OTA image or validated device release.**
 
-This directory is the public source workspace for the pinned October `sdDongle` ABI. It contains no patched vendor executable, stock rollback TAR, uploader or phone logs. The downloadable legacy ZIPs at the repository root are separate historical projects and remain unchanged.
+This directory is the public source workspace for the pinned October `sdDongle` ABI. It contains no patched vendor executable, stock rollback TAR, uploader or phone logs. Historical firmware ZIPs are preserved unchanged in [GitHub Releases](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-leon-mu1447-v0.2-legacy). A separate [v0.5 RC2 test package](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) contains proprietary vendor inputs outside this source directory.
 
 ## Implemented features in source
 
@@ -57,7 +57,7 @@ Validation is separated by feature in [TEST-MATRIX.md](../../docs/ax1800m/TEST-M
 
 ## License and publication scope
 
-The source and project-authored code retain the [MIT license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md), including source lineage from [OMKE/wireless-carplay-virtual-cockpit](https://github.com/OMKE/wireless-carplay-virtual-cockpit) at commit `321191526ef26f98df87d85cd35d7597e5940ff1`. These patches were informed by disassembly of the proprietary, separately obtained October vendor binary; they are not presented as clean-room work. The original binary, stock OTA, raw logs and private test data are **not** distributed or relicensed.
+The source and project-authored code retain the [MIT license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md), including source lineage from [OMKE/wireless-carplay-virtual-cockpit](https://github.com/OMKE/wireless-carplay-virtual-cockpit) at commit `321191526ef26f98df87d85cd35d7597e5940ff1`. These patches were informed by disassembly of the proprietary, separately obtained October vendor binary; they are not presented as clean-room work. The original proprietary vendor binaries are **not included in this source directory or relicensed**. The separate experimental RC2 application ZIP includes manufacturer binaries under their existing proprietary status; raw logs/private test data are not distributed.
 
 The two user-supplied photos below were published with the owner's permission only, are **not** covered by MIT, and cannot be freely redistributed or relicensed:
 

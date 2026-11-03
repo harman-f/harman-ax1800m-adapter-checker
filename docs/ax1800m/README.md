@@ -12,4 +12,4 @@ This is the canonical index for the **current v0.5 independent Type-111 source**
 
 Code: [experimental/ax1800m-mini-ultra-october-relay](../../experimental/ax1800m-mini-ultra-october-relay/README.md). Root [repository overview](../../README.md).
 
-**Evidence levels:** `implemented` means source exists; `host PASS` means tests executed on non-target machines; `target observed` means a reported device/vehicle log or screen, not third-party certification; `unverified` must not be treated as working. No v0.5 firmware package or hardware acceptance exists here.
+**Evidence levels:** `implemented` means source exists; `host PASS` means tests executed on non-target machines; `target observed` means a reported device/vehicle log or screen, not third-party certification; `unverified` must not be treated as working. An [offline-verified v0.5 RC2 application test package](https://github.com/harman-f/harman-ax1800m-adapter-checker/releases/tag/ax1800m-miniultra-v0.5-rc2) now exists; **hardware acceptance does not**. See [RELEASES.md](RELEASES.md).

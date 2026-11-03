@@ -15,7 +15,7 @@
 | Reconnect/replay to new phone generation | Sporadic disconnect / port invalid reported | Source state tests PASS | **Not tested** |
 | Source compile for MIPS32r2/o32 | Prior firmware build exists | Zig 0.14.1 cross-build PASS | Loader/ELF runtime unverified |
 | iOS command ACK and cockpit visual update | Wired A/B reference only | No host proof possible | **Unverified** |
-| Full OTA package, flash and recovery | Previous historical packages only | **Not built** | **Not performed** |
+| Full OTA package, flash and recovery | Previous historical packages only | **RC2 TAR and ZIP offline PASS; CGI uploader mock PASS** | **Not installed, flashed or recovery-tested** |
 
 The [source-only workflow](../../.github/workflows/ax1800m-v05-offline.yml) runs the C host relay, URL and geometry tests, AddressSanitizer/UBSan for the first two, downloads the **SHA-256 pinned** Zig 0.14.1 toolchain, cross-builds a MIPS shared object, checks the publication manifest and does no target action. The Research development precursor passed a host/MIPS check, but **the public fork's own CI is the authoritative gate for the published bytes**; inspect Actions before quoting its result.
 
@@ -24,7 +24,7 @@ The host mocks do not simulate a full adapter worker on target, actual HTTP plis
 ## Minimum parked-vehicle acceptance
 
 1. Baseline: confirm ETA `yes → no → yes` and surface `base → map` work with direct USB, keeping the same HU configuration.
-2. With a separately reviewed, explicitly opted-in v0.5 target package, repeat wirelessly while Stream 111 stays alive. Correlate *matching* `hu_cmd_ingress`, `phone_cmd_submit` or `hu_cmd_delayed`, a current phone session, and the cockpit visual result.
+2. With the separately reviewed, explicitly opted-in v0.5 RC2 test package, repeat wirelessly while Stream 111 stays alive. Correlate *matching* `hu_cmd_ingress`, `phone_cmd_submit` or `hu_cmd_delayed`, a current phone session, and the cockpit visual result.
 3. Check `stopUI` on leaving the menu, and disconnect/reconnect twice. Verify latest rather than stale UI is replayed, and Type-110 continues.
 4. Separately observe at least 60 seconds after screen teardown and the next reconnect; capture keepalive and `port_valid` outcome. Do not conflate failure modes.
 
