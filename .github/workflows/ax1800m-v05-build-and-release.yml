@@ -1,0 +1,94 @@
+name: AX1800M v0.5 offline firmware prerelease build
+on:
+  push:
+    branches: [work/ax1800m-v05-release-prep-20261103]
+    paths:
+      - 'experimental/ax1800m-mini-ultra-october-relay/**'
+      - 'release-prep/**'
+      - '.github/workflows/ax1800m-v05-build-and-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  offline-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert exact public stock ZIP and sources present
+        run: |
+          test -s AX1800M-Suding-Leon-MU1447-October-v0.2.zip
+          test -s experimental/ax1800m-mini-ultra-october-relay/src/relay.c
+      - name: ASan and UBSan host regression suites
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd experimental/ax1800m-mini-ultra-october-relay
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-error=misleading-indentation -Wno-error=unused-result -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -pthread tests/relay_test.c -o /tmp/ax_v05_relay_test
+          /tmp/ax_v05_relay_test
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer tests/hu_presentation_diag_test.c -o /tmp/ax_v05_url_test
+          /tmp/ax_v05_url_test
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 tests/geometry_test.c -o /tmp/ax_v05_geometry_test
+          /tmp/ax_v05_geometry_test
+      - name: Verify Zig 0.14.1 toolchain hash
+        run: |
+          curl -fL --retry 3 --connect-timeout 20 --max-time 180 -o /tmp/zig-x86_64-linux-0.14.1.tar.xz https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz
+          echo '24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c  /tmp/zig-x86_64-linux-0.14.1.tar.xz' | sha256sum -c -
+          tar -xf /tmp/zig-x86_64-linux-0.14.1.tar.xz -C /tmp
+          test "$(/tmp/zig-x86_64-linux-0.14.1/zig version)" = 0.14.1
+      - name: Cross-compile pinned MIPS32r2/o32
+        run: |
+          /tmp/zig-x86_64-linux-0.14.1/zig cc \
+            -target mipsel-linux-gnueabihf.2.17 -mcpu=mips32r2 -shared -fPIC -Os -nostdlib \
+            -Wl,-soname,libSdHOct.so -o /tmp/libSdHOct.so \
+            experimental/ax1800m-mini-ultra-october-relay/src/relay.c -lc -lpthread
+          file /tmp/libSdHOct.so
+          readelf -h /tmp/libSdHOct.so | grep -E 'ELF32|little endian|MIPS'
+      - name: Assemble exact October application and test bundle OFFLINE
+        run: |
+          python3 release-prep/build_v05.py --so /tmp/libSdHOct.so --out "$RUNNER_TEMP/ax1800m_v05" --source-commit "$GITHUB_SHA"
+      - name: Mock updater regressions, checksums and dry-run (no hardware)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bundle="$RUNNER_TEMP/ax1800m_v05/dist/AX1800M-Mini-Ultra1B-v0.5-rc1"
+          python3 -m unittest discover -s "$bundle/tests" -v
+          python3 "$bundle/adapter.py" dry-run
+          (
+            cd "$RUNNER_TEMP/ax1800m_v05/dist"
+            grep 'AX1800M-Mini-Ultra1B-v0.5-rc1.zip' SHA256SUMS.txt | sha256sum -c -
+          )
+          test -s "$RUNNER_TEMP/ax1800m_v05/dist/BUILD-SUMMARY.json"
+      - name: Upload exact checked release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: ax1800m-miniultra-v05-rc1-verified-offline
+          path: |
+            ${{ runner.temp }}/ax1800m_v05/dist/AX1800M-Mini-Ultra1B-v0.5-rc1.zip
+            ${{ runner.temp }}/ax1800m_v05/dist/SHA256SUMS.txt
+            ${{ runner.temp }}/ax1800m_v05/dist/BUILD-SUMMARY.json
+          if-no-files-found: error
+          retention-days: 30
+  publish-test-prerelease:
+    needs: offline-package
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ax1800m-miniultra-v05-rc1-verified-offline
+          path: dist
+      - name: Create prerelease without overwriting an existing tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="ax1800m-miniultra-v0.5-rc1"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "Existing tag; refusing overwrite"; exit 1; fi
+          gh release create "$tag" \
+            dist/AX1800M-Mini-Ultra1B-v0.5-rc1.zip \
+            dist/SHA256SUMS.txt dist/BUILD-SUMMARY.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "AX1800M Mini Ultra1-B v0.5 RC1 — UNTESTED firmware" \
+            --notes "EXPERIMENTAL prerelease. Not vehicle-tested; known keepalive/reconnect defects remain. Exact AX1800M/Suding October baseline required. Package contains guarded uploader, candidate application TAR and stock application rollback; not a full-device backup. Host/MIPS/archive/mock updater checks pass. Vendor binaries are proprietary and not covered by the MIT source license." \
+            --prerelease

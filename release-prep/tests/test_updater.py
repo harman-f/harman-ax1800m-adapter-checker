@@ -19,9 +19,9 @@ class Tests(unittest.TestCase):
         r,b=a.image('candidate');c.md5=r['md5'];return r,b
     def test_images(self):
         for k in ['candidate','rollback']:self.assertTrue(a.image(k)[1])
-    def test_retained_marker_is_v04_only(self):
-        self.assertTrue(a.has_v04_marker('prefix AX_INDEPENDENT v=4 suffix'))
-        self.assertFalse(a.has_v04_marker('prefix AX_INDEPENDENT v=3 suffix'))
+    def test_retained_marker_is_v05_only(self):
+        self.assertTrue(a.has_v05_marker('prefix AX_INDEPENDENT v=5 suffix'))
+        self.assertFalse(a.has_v05_marker('prefix AX_INDEPENDENT v=3 suffix'))
     def test_check_only_no_install(self):
         c=Fake();r,b=self.image(c);a.upload(c,r,b,False)
         self.assertFalse(any('submition' in x[0] or 'reboot' in x[0] for x in c.calls))
@@ -46,9 +46,9 @@ class Tests(unittest.TestCase):
         c=Fake(version='20260905144506')
         with self.assertRaises(a.Error):a.probe(c)
     def test_exact_owner_reply(self):
-        text='Content-Type: text/html\n\nsuccessfully deleted file: /tmp//wpa_ctrl_1115-0\nsuccessfully deleted file: /tmp//test.h264\nsuccessfully deleted file: /tmp//test.rgb\nsuccessfully deleted file: /tmp//nativeDict.plist\nsuccessfully deleted file: /tmp//hostapd.conf\nsuccessfully deleted file: /tmp//sdDongle.lock\nsuccessfully deleted file: /tmp//sdDongle_3.log\nresult is /tmp/ax_independent_relay_v04\nwrite data------success'
-        self.assertEqual(a.acknowledge(text,'upload','ax_independent_relay_v04'),'write data------success')
-        with self.assertRaises(a.Error):a.acknowledge(text,'upload','ax_independent_relay_v04',final=True)
+        text='Content-Type: text/html\n\nsuccessfully deleted file: /tmp//wpa_ctrl_1115-0\nsuccessfully deleted file: /tmp//test.h264\nsuccessfully deleted file: /tmp//test.rgb\nsuccessfully deleted file: /tmp//nativeDict.plist\nsuccessfully deleted file: /tmp//hostapd.conf\nsuccessfully deleted file: /tmp//sdDongle.lock\nsuccessfully deleted file: /tmp//sdDongle_3.log\nresult is /tmp/ax_independent_relay_v05\nwrite data------success'
+        self.assertEqual(a.acknowledge(text,'upload','ax_independent_relay_v05'),'write data------success')
+        with self.assertRaises(a.Error):a.acknowledge(text,'upload','ax_independent_relay_v05',final=True)
     def test_missing_checksum_rejected(self):
         with self.assertRaises(a.Error):a.acknowledge('success','upload','x',final=True)
     def test_noisy_checksum_accepted(self):
@@ -66,22 +66,22 @@ class Tests(unittest.TestCase):
         class Noisy(Fake):
             def request(self,path,data=None,ctype=None):
                 r=super().request(path,data,ctype)
-                if path=='/cgi-bin/downfile.cgi':return 'Content-Type: text/html\n\nresult is /tmp/ax_independent_relay_v04\n'+('write data------success' if r=='success' else 'write data------success\n'+r)
+                if path=='/cgi-bin/downfile.cgi':return 'Content-Type: text/html\n\nresult is /tmp/ax_independent_relay_v05\n'+('write data------success' if r=='success' else 'write data------success\n'+r)
                 return r
         c=Noisy();r,b=self.image(c);a.upload(c,r,b,False)
         self.assertFalse(any('submition' in x[0] or 'reboot' in x[0] for x in c.calls))
     def test_exact_owner_final_reply(self):
         md5='9a51df97c2e7e4efea373860fff85b1d'
-        text='Content-Type: text/html\n\nmd5_str is '+md5+'\nresult is /tmp/ax_independent_relay_v04\nwrite data------success\nfinal frame\n'+md5+'\nfile check success'
-        self.assertEqual(a.acknowledge(text,'upload','ax_independent_relay_v04',True,md5),'file check success')
-        with self.assertRaises(a.Error):a.acknowledge(text.replace(md5,'0'*32,1),'upload','ax_independent_relay_v04',True,md5)
-        with self.assertRaises(a.Error):a.acknowledge(text.replace('\n'+md5+'\n','\n'+'0'*32+'\n'),'upload','ax_independent_relay_v04',True,md5)
-        with self.assertRaises(a.Error):a.acknowledge(text.replace('file check success','file check fail'),'upload','ax_independent_relay_v04',True,md5)
+        text='Content-Type: text/html\n\nmd5_str is '+md5+'\nresult is /tmp/ax_independent_relay_v05\nwrite data------success\nfinal frame\n'+md5+'\nfile check success'
+        self.assertEqual(a.acknowledge(text,'upload','ax_independent_relay_v05',True,md5),'file check success')
+        with self.assertRaises(a.Error):a.acknowledge(text.replace(md5,'0'*32,1),'upload','ax_independent_relay_v05',True,md5)
+        with self.assertRaises(a.Error):a.acknowledge(text.replace('\n'+md5+'\n','\n'+'0'*32+'\n'),'upload','ax_independent_relay_v05',True,md5)
+        with self.assertRaises(a.Error):a.acknowledge(text.replace('file check success','file check fail'),'upload','ax_independent_relay_v05',True,md5)
     def test_owner_final_reply_full_flow(self):
         class FinalNoise(Fake):
             def request(self,path,data=None,ctype=None):
                 r=super().request(path,data,ctype)
-                if path=='/cgi-bin/downfile.cgi' and r=='file check success':return 'Content-Type: text/html\n\nmd5_str is '+self.md5+'\nresult is /tmp/ax_independent_relay_v04\nwrite data------success\nfinal frame\n'+self.md5+'\nfile check success'
+                if path=='/cgi-bin/downfile.cgi' and r=='file check success':return 'Content-Type: text/html\n\nmd5_str is '+self.md5+'\nresult is /tmp/ax_independent_relay_v05\nwrite data------success\nfinal frame\n'+self.md5+'\nfile check success'
                 return r
         c=FinalNoise();r,b=self.image(c);a.upload(c,r,b,False)
         self.assertEqual(c.parts,(len(b)+10239)//10240)
@@ -95,10 +95,10 @@ class Tests(unittest.TestCase):
         with self.assertRaises(a.Error) as e:a.upload(c,r,b,True)
         self.assertTrue(e.exception.install_requested)
     def test_exact_owner_install_reply(self):
-        text='Content-Type: text/html\n\nlibSdAuto.so\nlibSdCommon.so\nlibSdSampleRate.so\nlibSdUtils.so\nsdDongle\nlibSdH.so\ntemp is tar -xvf  /tmp/ax_independent_relay_v04 -C /usr/data/lib/\nsuccess download'
-        self.assertEqual(a.acknowledge(text,'install','ax_independent_relay_v04'),'success download')
-        with self.assertRaises(a.Error):a.acknowledge(text.replace('/usr/data/lib/','/another/'),'install','ax_independent_relay_v04')
-        with self.assertRaises(a.Error):a.acknowledge(text.replace('success download','failed'),'install','ax_independent_relay_v04')
+        text='Content-Type: text/html\n\nlibSdAuto.so\nlibSdCommon.so\nlibSdSampleRate.so\nlibSdUtils.so\nsdDongle\nlibSdH.so\ntemp is tar -xvf  /tmp/ax_independent_relay_v05 -C /usr/data/lib/\nsuccess download'
+        self.assertEqual(a.acknowledge(text,'install','ax_independent_relay_v05'),'success download')
+        with self.assertRaises(a.Error):a.acknowledge(text.replace('/usr/data/lib/','/another/'),'install','ax_independent_relay_v05')
+        with self.assertRaises(a.Error):a.acknowledge(text.replace('success download','failed'),'install','ax_independent_relay_v05')
     def test_install_failure_never_requests_reboot(self):
         class Failed(Fake):
             def request(self,path,data=None,ctype=None):

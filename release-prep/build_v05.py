@@ -120,6 +120,8 @@ def main():
     for name in ["adapter.py","RECOVERY.md"]:
         shutil.copyfile(HERE/name,bundle/name)
     shutil.copyfile(HERE/"START-HERE.md",bundle/"START-HERE.md")
+    (bundle/"tests").mkdir()
+    shutil.copyfile(HERE/"tests/test_updater.py",bundle/"tests/test_updater.py")
 
     images={
         "candidate":{"file":"firmware/"+CANDIDATE_TAR,"upload_name":"ax_independent_relay_v05",
