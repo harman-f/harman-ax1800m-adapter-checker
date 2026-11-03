@@ -33,3 +33,7 @@ Why this is needed: the public vendor server is currently offering the October
 application; direct requests for this adapter's January/March installed versions
 did not return firmware. The exact application backup and corresponding rollback
 have not been obtained. Olli's previous firmware is not included or relabeled here.
+
+## October OTA and the experimental v0.5 source
+
+The strict checker allowlist above accepts protocol `20260109175612` only. The same Mini Ultra 1-B **after** the October OTA was observed with protocol `20261008165747`. That post-OTA device can be rejected by the checker even when it is functioning correctly; **do not bypass the checker allowlist or infer firmware compatibility from a product label**. The [separate experimental v0.5 source](experimental/ax1800m-mini-ultra-october-relay/README.md) does not change checker behavior, upload or flash anything, or qualify a different system revision.

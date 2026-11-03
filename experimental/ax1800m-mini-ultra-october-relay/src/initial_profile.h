@@ -2,7 +2,8 @@
 #define INITIAL_PROFILE_H
 #include <stdint.h>
 #include <string.h>
-/* Initial cluster-map fallback only. Dynamic map commands are not bridged. */
+/* Historic /map default used only when HU provides no valid initialURL and
+ * no qualified showUI/stopUI intent. See docs/ax1800m/CONTROL-PLANE.md. */
 #define INITIAL_CLUSTER_MAP_URL "maps:/car/instrumentcluster/map"
 static int stream_has_h264_idr(const unsigned char *b, unsigned len) {
   unsigned pos = 0;

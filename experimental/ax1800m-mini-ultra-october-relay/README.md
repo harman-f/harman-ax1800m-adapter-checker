@@ -1,56 +1,68 @@
-# Carlinkit MINI Ultra 1-B — October relay source experiment
+# AX1800M Mini Ultra 1-B — independent October Type-111 relay v0.5
 
-**Experimental source only. Not a firmware package or a general compatibility claim.** This directory contains the v0.4 relay source and offline host regressions. It contains no adapter firmware, stock rollback archive, patched executable, or device uploader. The existing firmware ZIPs in this repository are unchanged.
+**Current source version: v0.5 · code and offline tests only · NOT an OTA image or validated device release.**
 
-The implementation reads HU canvas geometry dynamically, and the host geometry tests exercise several synthetic canvas sizes. The binary hooks and ABI are tied to the exact October `sdDongle` build below. Dynamic geometry does not make the binary compatible with other adapter firmware, hardware revisions, or head units.
+This directory is the public source workspace for the pinned October `sdDongle` ABI. It contains no patched vendor executable, stock rollback TAR, uploader or phone logs. The downloadable legacy ZIPs at the repository root are separate historical projects and remain unchanged.
 
-## Observed sample and pinned software baseline
+## Implemented features in source
 
-The owner reports that the purchased adapter was labeled **Mini Ultra 1-B** and, after the October OTA, reported the following sample values. These are observed values for that one adapter, not defaults or a compatibility guarantee:
+| Area | Current v0.5 source behavior | Evidence |
+| --- | --- | --- |
+| Independent cockpit video | Negotiates and relays Type 111 alongside stock Type 110; independent relay lifecycle, AES/ChaCha translation, selective teardown | Earlier v0.4 owner-reported car test; v0.5 offline tests only |
+| HU display profile | Reads and validates single 111 display UUID/dimensions. Honors recognized `displays[].initialURL` when supplied; historical `/map` URL only as fallback | Host tests, not car-confirmed for v0.5 |
+| Map/ETA commands | Recognizes `showUI`, `stopUI`, `updateViewArea`, `forceKeyFrame` with matching HU UUID, preserving full `params` | Host mocks; dongle ingress not measured with v0.5 |
+| HU→phone command gap | Hooks the actual HU-event plist decoder, observes the stock phone sender, waits 150 ms before attempting **one** fallback only if stock did not submit that command | Static ABI audit, host tests; iOS acceptance unknown |
+| New phone session | Coalesces two car-owned command slots (UI and ViewArea), retains nested params, guards against superseded values, replays after phone 111 setup | Host tests; reconnect behavior not field-qualified |
+| Receive / teardown safety | Handles partial frames through timeouts, distinguishes auxiliary/native/full teardown, stale worker generations | Host tests; spontaneous keepalive/reconnect still open |
+| Telemetry | Emits command type and recognized map setting enums; does not print raw URLs, display UUID, IP, arbitrary plist or phone identity | Source review/host tests |
 
-| Field | Observed sample |
-| --- | --- |
-| Platform | `AX1800M` |
-| Custom | `suding` |
-| Product model | `v851se-yunlian-cp` |
-| System version | `202603120956CA` |
-| Protocol version | `20261008165747` |
-| OTA catalog label | `ax_202610081657` |
-| Stock OTA TAR size | 1,812,992 bytes |
-| Stock OTA TAR SHA-256 | `13ca438ad4db00bbac0fa4650419df110bf17611a69525409261318a8bbade86` |
+**Do not infer that a car menu setting is repaired simply because the dongle submits a command.** A synchronous `submit_rc=0` is not an iPhone completion or visible cockpit change. The independent v0.5 source is an implementation candidate pending a controlled vehicle check.
 
-The stock TAR and vendor executable are not redistributed here. To reproduce analysis or a target build, obtain the exact `ax_202610081657` stock archive through a lawful source and verify its SHA-256 before use. The public source build and host tests below do not require vendor firmware. No firmware-independence claim is made.
+## Source layout
 
-Owner-provided purchase listing (reference only; not evidence of internal hardware): [Amazon.de](https://www.amazon.de/dp/B0F67CP9ZD).
+```text
+src/relay.c                   Stock ABI hooks, Type-111 worker, control bridge
+src/hu_presentation_diag.h    Allowlisted map-URL parser (privacy-safe diagnostics)
+src/vendor_abi.h              Pinned October vendor addresses, CF and AirPlay calls
+src/initial_profile.h         Historic initial /map fallback and video-IDR helper
+src/geometry.h                Dynamic video canvas values
+tests/relay_test.c            Mocked lifecycle/control cases
+tests/hu_presentation_diag_test.c   URL grammar and rejection cases
+tests/geometry_test.c         Four canvas cases
+build.py                      Zig MIPS shared-library + POSIX host tests only
+SOURCE-MANIFEST.sha256        Integrity of published sources, docs and photos
+assets/                       Owner-permitted photographs; not MIT-licensed
+```
 
-The manufacturer lists the product as `CPC200-Mini Ultra1` on its [official Mini Ultra1 page](https://www.carlinkit.com/ultra1). Public [CatPlay Mini Ultra documentation](https://github.com/catplay-labs/catplay-firmware/blob/master/docs/Carlinkit%20Mini%20Ultra.md) describes an AX1800M revision and warns that the Mini Ultra name has also been used for different hardware. The product name alone does not identify a board revision or installed software. The public documentation is contextual hardware information, not evidence that CatPlay or this relay was tested on other revisions.
+Detailed engineering notes are in [../../docs/ax1800m](../../docs/ax1800m/README.md).
 
-![User-supplied Mini Ultra 1-B packaging photo](assets/miniultra1-b-packaging-photo.jpg)
+## Exact target and observations
 
-User supplied this packaging photo for publication with permission. Rights remain with the owner; no open license is granted. Its label/EAN identify the package, not the exact internal board.
+An owner-supplied Mini Ultra 1-B was observed with `platform=AX1800M`, `custom=suding`, product `v851se-yunlian-cp`, system `202603120956CA`, and after the October OTA protocol `20261008165747`. Vendor catalog entry: `ax_202610081657`. The identified October stock OTA TAR is 1,812,992 bytes (SHA-256 `13ca438ad4db00bbac0fa4650419df110bf17611a69525409261318a8bbade86`); pinned stock `sdDongle` SHA-256 `edff2ce4ae238d682fdc45be680d4cab919fc1be09bf398aaff4897289390bcb`. **Neither stock TAR nor vendor binary is redistributed here.**
 
-![Owner-supplied Mini Ultra 1-B package and dongle](assets/miniultra1-b-package-and-dongle-original.jpg)
+An earlier owner-reported Skoda MHI2 `MHI2_ER_SKG13_P4526_MU1440` test observed CarPlay video/config, navigation symbols and zoom, including a reported 6,827-frame v0.4 session. This does not qualify the new v0.5 control bridge or make other head units/boards compatible. See [compatibility](../../docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md).
 
-Owner supplied this original photo and permitted publication. Rights remain with the owner; no open license is granted. It documents the package and dongle appearance; the package label/EAN does not prove the exact internal board.
+## Reproduce the offline checks
 
-## Reported head-unit test and known issue
-
-On one owner-reported Skoda MHI2 / `MHI2_ER_SKG13_P4526_MU1440` setup, CarPlay video/configuration, navigation symbols, and zoom were observed. One menu exit did not immediately disconnect. v0.4 corrects a source-level teardown classification error: the stock callback provides a `CFDictionary`, not a stream array. This source correction does not prove the cause of the menu-exit behavior or qualify it. Spontaneous keepalive disconnects remain unresolved. This is one owner-reported test, not independent validation or support for every vehicle, adapter, or firmware variant.
-
-## Build and offline tests
-
-Requirements: Zig **0.14.1**, Python 3, a POSIX C compiler (`cc`, `clang`, or `gcc`), and pthreads. Run on Linux or macOS, or in a POSIX environment such as WSL. No vendor firmware input is required for these source and host checks.
+Prerequisites: Python 3, Zig **0.14.1**, a POSIX C compiler and pthreads. On Linux/macOS/WSL:
 
 ```sh
 ZIG=/path/to/zig-0.14.1 HOST_CC=cc python3 build.py
+sha256sum -c SOURCE-MANIFEST.sha256
 ```
 
-The script checks the Zig version, cross-compiles `src/relay.c` for MIPS32r2 into `build/libSdHOct.so`, then builds and runs `tests/relay_test.c` and `tests/geometry_test.c` on the host. Set `ZIG` to the Zig 0.14.1 executable and `HOST_CC` to the POSIX C compiler if they are not available under those names. Build outputs are kept under `build/`.
+The script builds `build/libSdHOct.so` for MIPS32r2 and executes three **host** tests. The library is a source build product, **not** an OTA package and not directly flashable. CI verifies the pinned Zig download and ELF architecture; source cross-compilation cannot establish runtime ABI interoperability.
 
-The tests cover source-level socket framing and cancellation, teardown classification, concurrent relay lifecycle seams, and geometry handling with mocks. They do not exercise a complete adapter worker session, target loading, phone negotiation, rendering, audio, or vehicle behavior. A successful host build is not hardware qualification.
+Validation is separated by feature in [TEST-MATRIX.md](../../docs/ax1800m/TEST-MATRIX.md). See [KNOWN-ISSUES.md](../../docs/ax1800m/KNOWN-ISSUES.md) before attempting any field work.
 
-## Provenance and license
+## License and publication scope
 
-The v0.4 source builds on the supplied MIT-licensed v0.2 source package. Some ABI declarations and geometry/AVCC helper lineage derive from OMKE's [wireless-carplay-virtual-cockpit source](https://github.com/OMKE/wireless-carplay-virtual-cockpit), reference commit `321191526ef26f98df87d85cd35d7597e5940ff1`; the MIT notice and attribution remain in [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Project-authored v0.3 changes added initial SETUP acceptance, independent cockpit teardown, and cancellation lifetime handling. v0.4 corrects the stock teardown ABI classification. The October ABI and hook addresses were developed using the exact vendor executable identified above; this is not a clean-room reverse-engineering claim. Vendor firmware is not included or relicensed.
+The source and project-authored code retain the [MIT license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md), including source lineage from [OMKE/wireless-carplay-virtual-cockpit](https://github.com/OMKE/wireless-carplay-virtual-cockpit) at commit `321191526ef26f98df87d85cd35d7597e5940ff1`. These patches were informed by disassembly of the proprietary, separately obtained October vendor binary; they are not presented as clean-room work. The original binary, stock OTA, raw logs and private test data are **not** distributed or relicensed.
 
-Included source, tests, build script, MIT notice, and photo hashes are listed in [SOURCE-MANIFEST.sha256](SOURCE-MANIFEST.sha256).
+The two user-supplied photos below were published with the owner's permission only, are **not** covered by MIT, and cannot be freely redistributed or relicensed:
+
+![Owner-authorized package photo](assets/miniultra1-b-packaging-photo.jpg)
+
+![Owner-authorized package and adapter photo](assets/miniultra1-b-package-and-dongle-original.jpg)
+
+The photos show exterior packaging/device appearance, not a verified PCB or SoC revision. For product context see [Carlinkit Mini Ultra1](https://www.carlinkit.com/ultra1); product names may span different hardware variants.

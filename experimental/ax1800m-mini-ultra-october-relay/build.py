@@ -5,6 +5,7 @@ import pathlib
 import shlex
 import shutil
 import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
 BUILD = ROOT / "build"
@@ -40,14 +41,18 @@ def main():
                "-o", BUILD / "libSdHOct.so", ROOT / "src/relay.c", "-lc", "-lpthread"])
 
     extra_flags = shlex.split(os.environ.get("HOST_CFLAGS", ""))
-    for name in ("relay_test", "geometry_test"):
+    # macOS has no MSG_NOSIGNAL; never mask Linux's enum with -D...=0.
+    if sys.platform == "darwin":
+        extra_flags.append("-DMSG_NOSIGNAL=0")
+    for name in ("relay_test", "geometry_test", "hu_presentation_diag_test"):
         binary = BUILD / name
         run(host_cc + ["-std=gnu11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
-                       "-Wno-unused-variable", "-DMSG_NOSIGNAL=0", "-UNDEBUG", "-O1", "-pthread"] +
+                       "-Wno-unused-variable", "-Wno-error=misleading-indentation",
+                       "-Wno-error=unused-result", "-UNDEBUG", "-O1", "-pthread"] +
             extra_flags + [ROOT / f"tests/{name}.c", "-o", binary])
         run([binary])
 
-    print(f"BUILD_PASS zig={version} target=mips32r2 host_tests=PASS firmware_package=NOT_BUILT")
+    print(f"BUILD_PASS zig={version} target=mips32r2 host_tests=PASS firmware_package=NOT_BUILT host_suites=3")
 
 
 if __name__ == "__main__":

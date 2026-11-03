@@ -1,32 +1,29 @@
-# Wireless CarPlay adapter checker and downloads
+# Wireless CarPlay adapters: checker, historic images and AX1800M relay
 
-**HIGHLY EXPERIMENTAL. USE AT YOUR OWN RISK. NO WARRANTY.** Read the compatibility instructions before using any firmware package.
+**Experimental research. Source builds are not installable firmware.** Incorrect OTA images can disable an adapter. Read [compatibility and recovery limitations](docs/ax1800m/COMPATIBILITY-AND-RECOVERY.md) before attempting any update.
 
-## Adapter firmware downloads
+## Find the right component
 
-- [HW301 / CXZ521 / SEAT MU1409 v0.1 ZIP](./HW301-CXZ521-SEAT-MU1409-v0.1.zip)
-- [AX1800M / Suding / Leon MU1447 / October v0.2 ZIP](./AX1800M-Suding-Leon-MU1447-October-v0.2.zip)
-- [Compatibility, checksums, provenance and instructions](./ADAPTER-FIRMWARE.md)
+| Component | Contents | Verified status |
+| --- | --- | --- |
+| [AX1800M Mini Ultra 1-B independent relay v0.5](experimental/ax1800m-mini-ultra-october-relay/README.md) | Source, host regression tests, MIPS32r2 build recipe; **no firmware TAR or flasher** | Offline build/tests; **v0.5 has not been run on hardware** |
+| [Read-only AX1800M identity checker](PROBE-README.md) | Read-only Python probe and [checker ZIP](Harman-AX1800M-readonly-probe-v0.1.zip) | Strict allowlist for pre-October-OTA protocol `20260109175612`; does not update |
+| [Legacy experimental firmware packages](ADAPTER-FIRMWARE.md) | Two separately pinned, previously published ZIPs for **different** hardware/version targets | Individual, historic qualification only; **not** v0.5 |
+| [HW301 / CXZ521 / SEAT MU1409 package](HW301-CXZ521-SEAT-MU1409-v0.1.zip) | Legacy v0.1 candidate and its own rollback/uploader | Hardware-specific; not interchangeable with AX1800M |
+| [AX1800M / Suding / Leon MU1447 v0.2 package](AX1800M-Suding-Leon-MU1447-October-v0.2.zip) | Legacy v0.2 candidate and its own rollback/uploader | Pinned older **system** version; not a Mini Ultra v0.5 build |
 
-Both packages contain candidate and rollback binaries plus their uploaders and instructions. They are not interchangeable. Neither matches system `202603120956CA` / protocol `20260109175612`; that newer adapter is covered only by the read-only checker below.
+## AX1800M v0.5 engineering focus
 
-## Read-only AX1800M checker
+The direct USB connection between MHI2 and iPhone already applies the cockpit's Apple Maps URL/menu settings. Through a wireless AX1800M dongle the Type-111 video stream has been observed, but **changes to ETA, map surface and maneuver position do not reliably appear**. A dongle terminates the car-facing and iPhone-facing sessions, so working video does not establish a working control bridge.
 
-[Download the checker ZIP](./Harman-AX1800M-readonly-probe-v0.1.zip)
+v0.5 instruments the **actual HU binary-plist decoder** (not the ineffective eventMsgProc GOT reference), observes the stock phone command sender, retains the latest HU-owned `showUI/stopUI` and `updateViewArea`, and offers a bounded delayed submission and next-phone-session replay. It prefers the HU's `initialURL` to the prior constant fallback. This is source-level behavior: **no vehicle, phone ACK, OTA installation or reconnect fix is claimed for v0.5**.
 
-Read-only diagnostics for the AX1800M / Suding adapter with system `202603120956CA`, protocol `20260109175612`, and product `v851se-yunlian-cp`. This checker is not a firmware update or a wireless cockpit fix.
+Start here: [AX1800M documentation index](docs/ax1800m/README.md), [control-plane design](docs/ax1800m/CONTROL-PLANE.md), [test/evidence matrix](docs/ax1800m/TEST-MATRIX.md), and [open bugs](docs/ax1800m/KNOWN-ISSUES.md).
 
-1. Download and unzip the checker ZIP.
-2. Power the adapter from USB and connect your computer to its Wi-Fi.
-3. In the extracted folder, run `py probe-adapter.py` on Windows, or `python3 probe-adapter.py` on Mac/Linux. Python 3 is required.
-4. Send back the generated diagnostic folder privately.
+## Device identification and safety
 
-Default address: `192.168.50.100`. Use `--host LOCAL_IP` to override it. Expected duration: about 10–30 seconds.
+- The studied owner-supplied *Mini Ultra 1-B* sample is `platform=AX1800M`, `custom=suding`, `product_Model=v851se-yunlian-cp`, `system_version=202603120956CA`. Following October OTA, protocol was observed as `20261008165747`; the earlier checker targets `20260109175612`.
+- The experimental source specifically targets October `sdDongle` catalog `ax_202610081657`, pinned by **exact binary hash and entry-point ABI**. The retail model name alone cannot establish compatibility.
+- No current package here is a tested AX1800M v0.5 OTA or full hard-brick recovery image. Do not transplant the old ZIPs or bypass identity checks.
 
-The checker reads identity and the web page and checks existing SSH/Telnet ports for banners. It does not attempt logins, upload firmware, execute updater commands, reboot, or change settings. Five host tests passed; hardware execution remains untested. The separately downloaded firmware uploaders have explicit flash/rollback commands that do write to the adapter.
-
-See [detailed checker instructions](./PROBE-README.md). Do not publish diagnostic captures without reviewing them for private information.
-
-## AX1800M source experiment for Carlinkit MINI Ultra 1-B
-
-[Experimental October relay source and offline tests](./experimental/ax1800m-mini-ultra-october-relay/README.md) cover an owner-reported Mini Ultra 1-B sample and one Skoda MHI2 / MU1440 test. CarPlay video/configuration, navigation symbols, and zoom were observed; one menu exit did not immediately disconnect. v0.4 corrects a source-level teardown classification error (`CFDictionary` versus stream array), but the cause and qualification of menu-exit behavior remain unproven. Spontaneous keepalive disconnects remain unresolved. The source is tied to the October `sdDongle` baseline and includes no firmware or uploader.
+Source license and photo rights are explained [here](experimental/ax1800m-mini-ultra-october-relay/README.md#license-and-publication-scope).

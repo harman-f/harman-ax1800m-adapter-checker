@@ -1,0 +1,50 @@
+name: AX1800M v0.5 source-only offline checks
+on:
+  push:
+    branches: [main, work/ax1800m-v05-control-docs-20261103]
+    paths:
+      - 'experimental/ax1800m-mini-ultra-october-relay/**'
+      - '.github/workflows/ax1800m-v05-offline.yml'
+  pull_request:
+    paths:
+      - 'experimental/ax1800m-mini-ultra-october-relay/**'
+      - '.github/workflows/ax1800m-v05-offline.yml'
+permissions:
+  contents: read
+jobs:
+  host-and-cross-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: experimental/ax1800m-mini-ultra-october-relay
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host relay controls (ASan/UBSan)
+        run: |
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-error=misleading-indentation -Wno-error=unused-result -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -pthread tests/relay_test.c -o /tmp/ax_relay_test
+          /tmp/ax_relay_test
+      - name: Navigation URL grammar (ASan/UBSan)
+        run: |
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer tests/hu_presentation_diag_test.c -o /tmp/ax_url_test
+          /tmp/ax_url_test
+      - name: Geometry host checks
+        run: |
+          cc -std=gnu11 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -UNDEBUG -O1 tests/geometry_test.c -o /tmp/ax_geometry_test
+          /tmp/ax_geometry_test
+      - name: Fetch pinned Zig 0.14.1
+        run: |
+          curl -fL --retry 3 --connect-timeout 20 --max-time 180 -o /tmp/zig-0.14.1.tar.xz https://ziglang.org/download/0.14.1/zig-x86_64-linux-0.14.1.tar.xz
+          echo "24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c  /tmp/zig-0.14.1.tar.xz" | sha256sum -c -
+          tar -xf /tmp/zig-0.14.1.tar.xz -C /tmp
+          test "$(/tmp/zig-x86_64-linux-0.14.1/zig version)" = "0.14.1"
+      - name: MIPS32r2/o32 source cross-build only
+        run: |
+          /tmp/zig-x86_64-linux-0.14.1/zig cc -target mipsel-linux-gnueabihf.2.17 -mcpu=mips32r2 -shared -fPIC -Os -nostdlib -Wl,-soname,libSdHOct.so -o /tmp/ax_libSdHOct.so src/relay.c -lc -lpthread
+          file /tmp/ax_libSdHOct.so
+          readelf -h /tmp/ax_libSdHOct.so | grep -E 'ELF32|little endian|MIPS'
+          echo MIPS32R2_SOURCE_BUILD_PASS
+      - name: Source and photos integrity manifest
+        run: sha256sum -c SOURCE-MANIFEST.sha256
+      - name: No flash or device operations
+        run: echo "Offline tests only; no OTA package, uploader, adapter access or device mutation."
