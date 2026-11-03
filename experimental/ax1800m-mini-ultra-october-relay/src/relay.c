@@ -1,5 +1,6 @@
 /* Independent October vendor-binary relay. No Harman dynamic111 modules. */
 #include "vendor_abi.h"
+#include "hu_presentation_diag.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/time.h>
@@ -11,6 +12,14 @@
 #define TEARDOWN_GOT 0x56507cu
 #define PLATFORM_COPY_VA 0x488180u
 #define PLATFORM_COPY_GOT 0x565024u
+/* Stock October HU event ingress and phone command dispatch GOT (pinned ELF). */
+/* 0x4243dc is a direct BAL to eventMsgProc, NOT a GOT call. The
+ * preceding CFBinaryPlistV0CreateWithData call really uses GOT 0x565178. */
+#define HU_PLIST_VA 0x49ba74u
+#define HU_PLIST_GOT 0x565178u
+#define HU_PLIST_RETURN_PC 0x424398u
+#define PHONE_SEND_VA 0x472650u
+#define PHONE_SEND_GOT 0x565848u
 typedef void *(*info_fn)(void *,void *,int *);
 typedef int (*teardown_fn)(void *,void *,void *,unsigned char *,void *);
 typedef void *(*platform_copy_fn)(void *,unsigned,void *,void *,int *);
@@ -25,12 +34,14 @@ static unsigned long (*str_type)(void)=(unsigned long (*)(void))0x490c68u;
 static void **native_info=(void **)0x566f64u;
 static pthread_mutex_t profile_mu=PTHREAD_MUTEX_INITIALIZER;
 static char profile_uuid[128];
+static char profile_initial_url[384];
 static unsigned profile_generation;
+static void ax_control_clear_profile(const char *uuid);
 static unsigned long long next_relay_id,next_session_generation;
 
 static void log_event(const char *fmt,...) {
   char line[512]; struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t);
-  int n=snprintf(line,sizeof line,"AX_INDEPENDENT v=4 pid=%ld ms=%llu ",(long)getpid(),
+  int n=snprintf(line,sizeof line,"AX_INDEPENDENT v=5 pid=%ld ms=%llu ",(long)getpid(),
       (unsigned long long)t.tv_sec*1000+t.tv_nsec/1000000);
   va_list ap;va_start(ap,fmt);vsnprintf(line+n,sizeof line-(size_t)n,fmt,ap);va_end(ap);
   size_t len=strnlen(line,sizeof line-2);line[len++]='\n';
@@ -66,6 +77,25 @@ static int profile_read(void *root,char out[128]) {
     memcpy(out,tmp,sizeof tmp);matches++;
   }return matches==1;
 }
+/* Stock HU /info may provide an initialURL for the second display. Prefer
+ * that car-owned value to a hardcoded dongle policy, but only for a recognized
+ * local cluster URL. An unknown URL is left untouched in stock processing. */
+static int profile_read_initial_url(void *root,char out[384]) {
+  struct ax_hu_presentation parsed;
+  if(!out)return 0;
+  out[0]=0;
+  if(!root||cf_get_type_id(root)!=cf_dict_type_id())return 0;
+  void *a=dict_get(root,"displays",cf_array_type_id());
+  if(!a||cf_array_count(a)<1||cf_array_count(a)>32)return 0;
+  for(long i=0;i<cf_array_count(a);i++){
+    void *d=cf_array_at(a,i);
+    if(!d||cf_get_type_id(d)!=cf_dict_type_id()||dict_num(d,"type")!=111)continue;
+    void *url=dict_get(d,"initialURL",str_type());
+    if(url&&str_copy(url,out,384,0x08000100u)&&ax_hu_presentation_parse(out,&parsed))return 1;
+    out[0]=0;
+  }
+  return 0;
+}
 static int advertise(void *root) {
   if(!root||cf_get_type_id(root)!=cf_dict_type_id())return 0;
   void *key=str_create(0,"enabledFeatures",0x08000100u);
@@ -89,10 +119,16 @@ static int advertise(void *root) {
 static int refresh_native_profile(void) {
   char uuid[128]={0};void *root=*native_info;
   if(!root)return 0;
-  retain_cf(root);int valid=profile_read(root,uuid);cf_release(root);
+  char initial_url[384]={0};
+  retain_cf(root);int valid=profile_read(root,uuid);
+  if(valid)(void)profile_read_initial_url(root,initial_url);
+  cf_release(root);
   pthread_mutex_lock(&profile_mu);
   if(valid)memcpy(profile_uuid,uuid,sizeof profile_uuid);else profile_uuid[0]=0;
-  pthread_mutex_unlock(&profile_mu);return valid;
+  memcpy(profile_initial_url,initial_url,sizeof profile_initial_url);
+  pthread_mutex_unlock(&profile_mu);
+  ax_control_clear_profile(valid?uuid:NULL);
+  return valid;
 }
 /* The stock SETUP caller obtains this owned array AFTER relay_setup returns
  * and writes it over response.enabledFeatures. Hook that final property path. */
@@ -124,11 +160,15 @@ void *relay_platform_copy(void *server,unsigned flags,void *property,void *quali
 }
 void *relay_info(void *s,void *f,int *status) {
   void *r=stock_info(s,f,status);char uuid[128]={0};
+  char initial_url[384]={0};
   int valid=(!status||!*status)&&profile_read(r,uuid);
+  if(valid)(void)profile_read_initial_url(r,initial_url);
   pthread_mutex_lock(&profile_mu);
   if(valid)memcpy(profile_uuid,uuid,sizeof profile_uuid);else profile_uuid[0]=0;
+  memcpy(profile_initial_url,initial_url,sizeof profile_initial_url);
   profile_generation++;
   pthread_mutex_unlock(&profile_mu);
+  ax_control_clear_profile(valid?uuid:NULL);
   if(valid)advertise(r);
   log_event("stage=info profile111=%d native110=unchanged",valid);
   return r;
@@ -141,7 +181,7 @@ struct Relay {
   unsigned long long relay_id,session_generation;
   const char *stop_reason;int stop_full,stop_aux,stop_native;
   void *session,*client;unsigned long long conn;
-  char uuid[128];unsigned char car_key[16],peer[160];
+  char uuid[128],initial_url[384];unsigned char car_key[16],peer[160];
   unsigned char enc[0x200] __attribute__((aligned(8)));
 };
 static pthread_mutex_t current_mu=PTHREAD_MUTEX_INITIALIZER;
@@ -190,12 +230,300 @@ static int send_command(Relay *r,const char *type,int url) {
   if(!req||!params){if(req)cf_release(req);if(params)cf_release(params);return -1;}
   cf_dict_set_cstr(req,KEY_TYPE,(void *)type,0xffffffffu);
   cf_dict_set_cstr(params,K_UUID,r->uuid,0xffffffffu);
-  if(url)cf_dict_set_cstr(params,K_CMD_URL,(void *)"maps:/car/instrumentcluster",0xffffffffu);
+  if(url)cf_dict_set_cstr(params,K_CMD_URL,
+    r->initial_url[0]?(void *)r->initial_url:(void *)CLUSTER_MAP_URL,0xffffffffu);
   cf_dict_set_value(req,K_CMD_PARAMS,params);cf_release(params);
   pthread_mutex_lock(&r->mu);
   int rc=r->stopped?-1:session_send_command(r->session,req,0,0);
   pthread_mutex_unlock(&r->mu);cf_release(req);return rc;
 }
+
+/* v0.5: capture the actual HU plist decode, preserve stock dispatch, then
+ * perform one bounded late fallback only for an unsubmitted qualified command.
+ * Submit success does not imply an iPhone ACK. */
+enum ax_hu_command_kind { AX_HU_CMD_OTHER, AX_HU_CMD_SHOW, AX_HU_CMD_STOP, AX_HU_CMD_VIEW, AX_HU_CMD_KEYFRAME };
+struct ax_hu_command_meta {
+  enum ax_hu_command_kind kind;
+  char uuid[128];
+  struct ax_hu_presentation presentation;
+  int url_valid;
+};
+typedef void *(*ax_hu_plist_fn)(const void *,size_t,int *);
+static ax_hu_plist_fn stock_hu_plist_read=(ax_hu_plist_fn)HU_PLIST_VA;
+static sendcmd_fn stock_phone_command=(sendcmd_fn)PHONE_SEND_VA;
+static unsigned ax_hu_event_count,ax_phone_command_count;
+
+static enum ax_hu_command_kind ax_hu_parse_command(void *req,struct ax_hu_command_meta *m) {
+  char type[40]={0},url[384]={0};
+  void *params,*t,*u;
+  if(!m)return AX_HU_CMD_OTHER;
+  memset(m,0,sizeof *m);
+  if(!req||cf_get_type_id(req)!=cf_dict_type_id())return AX_HU_CMD_OTHER;
+  t=dict_get(req,"type",str_type());
+  if(!t||!str_copy(t,type,sizeof type,0x08000100u))return AX_HU_CMD_OTHER;
+  if(!strcmp(type,"showUI"))m->kind=AX_HU_CMD_SHOW;
+  else if(!strcmp(type,"stopUI"))m->kind=AX_HU_CMD_STOP;
+  else if(!strcmp(type,"updateViewArea"))m->kind=AX_HU_CMD_VIEW;
+  else if(!strcmp(type,"forceKeyFrame"))m->kind=AX_HU_CMD_KEYFRAME;
+  else return AX_HU_CMD_OTHER;
+  params=dict_get(req,"params",cf_dict_type_id());
+  if(!params)return AX_HU_CMD_OTHER;
+  u=dict_get(params,"uuid",str_type());
+  if(!u||!str_copy(u,m->uuid,sizeof m->uuid,0x08000100u)||!uuid_valid(m->uuid))return AX_HU_CMD_OTHER;
+  if(m->kind==AX_HU_CMD_SHOW) {
+    t=dict_get(params,"url",str_type());
+    if(t&&str_copy(t,url,sizeof url,0x08000100u))
+      m->url_valid=ax_hu_presentation_parse(url,&m->presentation);
+    memset(url,0,sizeof url); /* never retain or log an unvalidated URL */
+  }
+  return m->kind;
+}
+static const char *ax_hu_kind_name(enum ax_hu_command_kind kind) {
+  switch(kind) {
+  case AX_HU_CMD_SHOW:return "showUI";
+  case AX_HU_CMD_STOP:return "stopUI";
+  case AX_HU_CMD_VIEW:return "updateViewArea";
+  case AX_HU_CMD_KEYFRAME:return "forceKeyFrame";
+  default:return "other";
+  }
+}
+static void ax_hu_log_command(const char *stage,const struct ax_hu_command_meta *m,int rc,int matches_current) {
+  if(m->kind==AX_HU_CMD_SHOW) {
+    log_event("stage=%s kind=showUI surface=%s eta=%s speed=%s compass=%s maneuver=%s url_known=%d match_current=%d rc=%d",
+      stage,ax_hu_surface_name(m->presentation.surface),
+      ax_hu_toggle_name(m->presentation.eta),ax_hu_toggle_name(m->presentation.speed_limit),
+      ax_hu_toggle_name(m->presentation.compass),ax_hu_maneuver_name(m->presentation.maneuver),
+      m->url_valid,matches_current,rc);
+  }else if(m->kind==AX_HU_CMD_STOP||m->kind==AX_HU_CMD_VIEW) {
+    log_event("stage=%s kind=%s match_current=%d rc=%d",
+      stage,ax_hu_kind_name(m->kind),matches_current,rc);
+  } /* Do not write high-rate keyframe requests to flash. */
+}
+
+/* The HU, not the dongle, owns the selected UI URL and view. Hold a bounded
+ * snapshot of the last fully qualified, car-owned command for a later phone
+ * generation. A CFDictionaryCreateMutableCopy retains nested parameters. */
+struct ax_control_cached {
+  void *plist;
+  enum ax_hu_command_kind kind;
+  char uuid[128];
+  unsigned generation;
+  int pending;
+  unsigned long long due_ms;
+  const void *origin; /* pointer equality only; never dereference after return */
+};
+static int relay_phone_command(void *session,void *plist,void *completion,void *context);
+static pthread_mutex_t ax_control_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t ax_control_cond=PTHREAD_COND_INITIALIZER;
+static struct ax_control_cached ax_control[2]; /* 0: show/stop, 1: view */
+static unsigned ax_control_generation;
+static int ax_control_worker_enabled;
+static unsigned long long ax_now_ms(void) {
+  struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);
+  return (unsigned long long)t.tv_sec*1000ull+(unsigned long long)t.tv_nsec/1000000ull;
+}
+
+static void ax_control_reset(void) {
+  void *old[2];
+  pthread_mutex_lock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++){old[i]=ax_control[i].plist;memset(&ax_control[i],0,sizeof ax_control[i]);}
+  pthread_mutex_unlock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(old[i])cf_release(old[i]);
+}
+static void ax_control_clear_profile(const char *uuid) {
+  void *old[2]={0};
+  int changed=0;
+  pthread_mutex_lock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(ax_control[i].plist&&(!uuid||strcmp(ax_control[i].uuid,uuid)))changed=1;
+  if(changed)for(unsigned i=0;i<2;i++){
+    old[i]=ax_control[i].plist;memset(&ax_control[i],0,sizeof ax_control[i]);
+  }
+  pthread_mutex_unlock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(old[i])cf_release(old[i]);
+}
+static int ax_control_capture(void *plist,const struct ax_hu_command_meta *m) {
+  void *old[2]={0},*copy,*params,*params_copy,*key;
+  unsigned slot,change=0;
+  if(!m||!(m->kind==AX_HU_CMD_SHOW||m->kind==AX_HU_CMD_STOP||m->kind==AX_HU_CMD_VIEW))return 0;
+  if(m->kind==AX_HU_CMD_SHOW&&!m->url_valid)return 0;
+  if(!uuid_valid(m->uuid))return 0;
+  /* Copy both outer request and its params dictionary. A shallow CF copy
+   * alone would retain a possibly mutable original params object. */
+  params=dict_get(plist,"params",cf_dict_type_id());
+  if(!params)return 0;
+  copy=cf_dict_create_mutable_copy(0,0,plist);
+  params_copy=cf_dict_create_mutable_copy(0,0,params);
+  key=str_create(0,"params",0x08000100u);
+  if(!copy||!params_copy||!key){
+    if(copy)cf_release(copy);
+    if(params_copy)cf_release(params_copy);
+    if(key)cf_release(key);
+    return 0;
+  }
+  cf_dict_set_value(copy,key,params_copy);
+  cf_release(params_copy);cf_release(key);
+  slot=m->kind==AX_HU_CMD_VIEW?1u:0u;
+  pthread_mutex_lock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(ax_control[i].plist&&strcmp(ax_control[i].uuid,m->uuid))change=1;
+  if(change)for(unsigned i=0;i<2;i++){old[i]=ax_control[i].plist;memset(&ax_control[i],0,sizeof ax_control[i]);}
+  if(!old[slot])old[slot]=ax_control[slot].plist;
+  ax_control[slot].plist=copy;
+  ax_control[slot].kind=m->kind;
+  memcpy(ax_control[slot].uuid,m->uuid,sizeof m->uuid);
+  ax_control[slot].generation=++ax_control_generation;
+  ax_control[slot].pending=1;
+  ax_control[slot].due_ms=ax_now_ms()+150;
+  ax_control[slot].origin=plist;
+  pthread_cond_signal(&ax_control_cond);
+  pthread_mutex_unlock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(old[i])cf_release(old[i]);
+  return 1;
+}
+static int ax_control_has_ui(const char *uuid) {
+  int present;
+  pthread_mutex_lock(&ax_control_mu);
+  present=ax_control[0].plist&&uuid&&!strcmp(ax_control[0].uuid,uuid);
+  pthread_mutex_unlock(&ax_control_mu);
+  return present;
+}
+static void ax_control_replay(Relay *r) {
+  void *commands[2]={0};
+  unsigned versions[2]={0};enum ax_hu_command_kind kind[2]={0};
+  pthread_mutex_lock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(ax_control[i].plist&&!strcmp(ax_control[i].uuid,r->uuid)){
+    commands[i]=retain_cf(ax_control[i].plist);
+    versions[i]=ax_control[i].generation;kind[i]=ax_control[i].kind;
+  }
+  pthread_mutex_unlock(&ax_control_mu);
+  for(unsigned i=0;i<2;i++)if(commands[i]){
+    int rc=-1,still_current=0;
+    /* Recheck before send: a rapid ETA toggle must not knowingly replay
+     * an already superseded URL. The stock session still owns final ordering. */
+    pthread_mutex_lock(&ax_control_mu);
+    still_current=ax_control[i].plist&&ax_control[i].generation==versions[i]
+      &&!strcmp(ax_control[i].uuid,r->uuid);
+    pthread_mutex_unlock(&ax_control_mu);
+    if(still_current){
+      pthread_mutex_lock(&ax_control_mu);
+      if(ax_control[i].generation==versions[i])ax_control[i].pending=0;
+      pthread_mutex_unlock(&ax_control_mu);
+      pthread_mutex_lock(&r->mu);
+      if(!r->stopped)rc=relay_phone_command(r->session,commands[i],0,0);
+      pthread_mutex_unlock(&r->mu);
+      log_event("stage=hu_cmd_replay kind=%s version=%u submit_rc=%d",
+        ax_hu_kind_name(kind[i]),versions[i],rc);
+    }else log_event("stage=hu_cmd_replay kind=%s stale_revision=1",ax_hu_kind_name(kind[i]));
+    cf_release(commands[i]);
+  }
+}
+
+
+/* One detached, condition-driven worker for the entire vendor process. No
+ * per-event threads, no unbounded retries or unverified callback ownership. */
+static int ax_control_try_pending(unsigned slot) {
+  struct ax_control_cached x={0};Relay *active=NULL;int rc=-1,match=0;
+  if(slot>=2)return 0;
+  pthread_mutex_lock(&ax_control_mu);
+  if(ax_control[slot].plist&&ax_control[slot].pending
+      &&ax_control[slot].due_ms<=ax_now_ms()
+      &&(slot==0||!ax_control[0].pending)) {
+    x=ax_control[slot];
+    x.plist=retain_cf(ax_control[slot].plist);
+    ax_control[slot].pending=0;
+  }
+  pthread_mutex_unlock(&ax_control_mu);
+  if(!x.plist)return 0;
+  pthread_mutex_lock(&current_mu);
+  if(current&&!strcmp(current->uuid,x.uuid))active=hold(current);
+  pthread_mutex_unlock(&current_mu);
+  if(active) {
+    pthread_mutex_lock(&ax_control_mu);
+    match=ax_control[slot].plist&&ax_control[slot].generation==x.generation
+      &&!strcmp(ax_control[slot].uuid,x.uuid);
+    pthread_mutex_unlock(&ax_control_mu);
+    if(match) {
+      pthread_mutex_lock(&active->mu);
+      if(!active->stopped)rc=relay_phone_command(active->session,x.plist,0,0);
+      pthread_mutex_unlock(&active->mu);
+    }
+    drop(active);
+  }
+  log_event("stage=hu_cmd_delayed kind=%s version=%u current=%d submit_rc=%d",
+    ax_hu_kind_name(x.kind),x.generation,match,rc);
+  cf_release(x.plist);return 1;
+}
+static void *ax_control_worker(void *arg) {
+  (void)arg;
+  for(;;) {
+    pthread_mutex_lock(&ax_control_mu);
+    while(!ax_control[0].pending&&!ax_control[1].pending)
+      pthread_cond_wait(&ax_control_cond,&ax_control_mu);
+    pthread_mutex_unlock(&ax_control_mu);
+    struct timespec nap={0,170000000L};
+    while(nanosleep(&nap,&nap)&&errno==EINTR){}
+    (void)ax_control_try_pending(0);
+    (void)ax_control_try_pending(1);
+  }
+  return NULL;
+}
+static void ax_hu_observe_plist(void *plist) {
+  struct ax_hu_command_meta m;
+  enum ax_hu_command_kind kind=ax_hu_parse_command(plist,&m);
+  if(kind==AX_HU_CMD_OTHER)return;
+  int match=0,profile_match=0;
+  pthread_mutex_lock(&current_mu);
+  match=current&&!strcmp(current->uuid,m.uuid);
+  pthread_mutex_unlock(&current_mu);
+  pthread_mutex_lock(&profile_mu);
+  profile_match=uuid_valid(profile_uuid)&&!strcmp(profile_uuid,m.uuid);
+  pthread_mutex_unlock(&profile_mu);
+  (void)__sync_add_and_fetch(&ax_hu_event_count,1);
+  ax_hu_log_command("hu_cmd_ingress",&m,0,match);
+  if(profile_match||match) {
+    if(ax_control_capture(plist,&m))
+      log_event("stage=hu_cmd_cache kind=%s accepted=1",ax_hu_kind_name(kind));
+  }
+}
+/* The event-worker calls the decoder at 0x424390 (return-PC 0x424398),
+ * then calls eventMsgProc directly at 0x4243dc. The GOT of eventMsgProc
+ * itself would NOT intercept that direct call. */
+static void *relay_hu_plist_read(const void *data,size_t n,int *err) {
+  void *plist=stock_hu_plist_read(data,n,err);
+  if((uintptr_t)__builtin_return_address(0)==HU_PLIST_RETURN_PC
+      &&plist&&(!err||!*err))
+    ax_hu_observe_plist(plist);
+  return plist;
+}
+static int relay_phone_command(void *session,void *plist,void *completion,void *context) {
+  struct ax_hu_command_meta m;
+  enum ax_hu_command_kind kind=ax_hu_parse_command(plist,&m);
+  int rc=stock_phone_command(session,plist,completion,context);
+  if(kind!=AX_HU_CMD_OTHER) {
+    if(!rc) {
+      (void)__sync_add_and_fetch(&ax_phone_command_count,1);
+      if(kind==AX_HU_CMD_SHOW||kind==AX_HU_CMD_STOP||kind==AX_HU_CMD_VIEW) {
+        unsigned slot=kind==AX_HU_CMD_VIEW?1u:0u;
+        pthread_mutex_lock(&ax_control_mu);
+        if(ax_control[slot].plist&&ax_control[slot].pending
+            &&ax_control[slot].origin==plist
+            &&ax_control[slot].kind==kind
+            &&!strcmp(ax_control[slot].uuid,m.uuid))
+          ax_control[slot].pending=0;
+        pthread_mutex_unlock(&ax_control_mu);
+      }
+    }
+    ax_hu_log_command("phone_cmd_submit",&m,rc,-1);
+  }
+  return rc;
+}
+static int bind_control_probe_hooks(void **plist_decode,void **phone_send) {
+  if(!plist_decode||!phone_send
+      ||*plist_decode!=(void *)HU_PLIST_VA
+      ||*phone_send!=(void *)PHONE_SEND_VA)return 0;
+  *plist_decode=(void *)&relay_hu_plist_read;
+  *phone_send=(void *)&relay_phone_command;return 1;
+}
+
 static void setup_reply(void *msg) {
   Relay *r=*(Relay **)((char *)msg+0x8fc);int port=0,err=0;
   int len=*(int *)((char *)msg+0x4a0);
@@ -341,7 +669,11 @@ static void *worker(void *arg) {
   pthread_mutex_unlock(&r->mu);
   if(key_error){reason=stopped(r)?"cancelled":"phone_keys_error";stage="phone_keys";terminal_errno=errno;goto end;}
   stage="hu_setup";errno=0;if(car_setup(r)){reason=stopped(r)?"cancelled":"hu_setup_error";terminal_errno=errno;goto end;}
-  log_event("stage=showUI id=%llu submit_rc=%d",r->relay_id,send_command(r,"showUI",1));
+  /* Reissue the last HU-owned command(s) on a new phone generation, including
+   * exact dynamic query params; never override remembered stopUI with fixed UI. */
+  if(!ax_control_has_ui(r->uuid))
+    log_event("stage=showUI id=%llu submit_rc=%d source=legacy_fallback",r->relay_id,send_command(r,"showUI",1));
+  ax_control_replay(r);
   int primed=0;unsigned char cfgheader[128];
   while(!stopped(r)) {
     unsigned char hdr[128];FrameResult frame=read_phone_frame(r,phone,hdr,&body,&cap);stage=frame.stage;done=frame.done;requested=frame.requested;
@@ -370,7 +702,7 @@ static void *worker(void *arg) {
     }else aesctr_update(dec,body,(int)len,body);
     frames++;if(!cfglen)continue;
     if(!primed) {
-      primed=stream_has_h264_idr(body,len);
+      primed=seat_has_idr(body,len);
       if(!primed){if(frames%120==1)log_event("stage=keyframe id=%llu submit_rc=%d",r->relay_id,send_command(r,"forceKeyFrame",0));continue;}
     }
     ForwardResult sent=forward(r,0,body,len,0);
@@ -397,7 +729,10 @@ end:
 #else
   Relay *r=calloc(1,sizeof *r);if(!r)return 0;
   pthread_mutex_init(&r->mu,0);pthread_cond_init(&r->changed,0);r->refs=1;r->listener=r->phone=r->car=-1;
-  pthread_mutex_lock(&profile_mu);memcpy(r->uuid,profile_uuid,sizeof r->uuid);pthread_mutex_unlock(&profile_mu);
+  pthread_mutex_lock(&profile_mu);
+  memcpy(r->uuid,profile_uuid,sizeof r->uuid);
+  memcpy(r->initial_url,profile_initial_url,sizeof r->initial_url);
+  pthread_mutex_unlock(&profile_mu);
   if(!uuid_valid(r->uuid)||!conn||!session||!*GAIRPLAYCLIENT){pthread_cond_destroy(&r->changed);pthread_mutex_destroy(&r->mu);free(r);return 0;}
   r->conn=conn;r->session=retain_cf(session);r->client=retain_cf(*GAIRPLAYCLIENT);
   memcpy(r->car_key,GSESSION_AESKEY,16);sock_copy(GPEERADDR,r->peer);r->homekit=*GPAIRVERIFY_HK;
@@ -491,6 +826,13 @@ static int bind_hooks(void **setup,void **info,void **teardown,void **property) 
 __attribute__((constructor))static void init(void) {
   log_event("stage=constructor");
   int ok=bind_hooks((void **)SETUP_GOT_VA,(void **)INFO_GOT,(void **)TEARDOWN_GOT,(void **)PLATFORM_COPY_GOT);
-  log_event("stage=hooks ready=%d expected_stock=october_202610081657",ok);
+  int probe=ok && bind_control_probe_hooks((void **)HU_PLIST_GOT,(void **)PHONE_SEND_GOT);
+  if(probe) {
+    pthread_t th;
+    if(!pthread_create(&th,0,ax_control_worker,0)) {
+      pthread_detach(th);ax_control_worker_enabled=1;
+    }
+  }
+  log_event("stage=hooks ready=%d control_probe=%d control_worker=%d expected_stock=october_202610081657",ok,probe,ax_control_worker_enabled);
 }
 #endif

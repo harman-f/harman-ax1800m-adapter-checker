@@ -5,6 +5,8 @@
 typedef struct Obj Obj;
 struct Obj {int type,n;char text[128];void *key[64];int64_t val[64];Obj *item[64];};
 static Obj pool[4096];static unsigned used;static int stock_calls,teardown_calls;
+static int ctrl_send_calls;
+static int ctrl_send_mock(void *s,void *plist,void *cb,void *ctx){(void)s;(void)plist;(void)cb;(void)ctx;ctrl_send_calls++;return 0;}
 static void *last_request,*last_teardown,*last_td_session,*last_td_ctx,*last_td_a5,*last_td_done,*info_root;
 static void *platform_result;
 static void *platform(void *s,unsigned flags,void *key,void *q,int *status){(void)s;(void)flags;(void)key;(void)q;if(status)*status=platform_result?0:-6727;return platform_result;}
@@ -53,6 +55,91 @@ int main(void){
   cf_dict_create_mutable=mkdict;cf_array_create_mutable=mkarray;str_create=mkstr;str_copy=copystr;
   cf_dict_get_typed=get_typed;cf_dict_get_int64=get;cf_dict_set_int64=put;cf_dict_set_value=put_obj;
   cf_dict_create_mutable_copy=copy;cf_array_count=count;cf_array_at=at;cf_array_append=append;cf_release=release;add_response_stream=add;orig_setup=stock;stock_teardown=teardown;stock_info=info;
+
+  /* Passive command probes preserve ABI, classify only known CarPlay URLs, and
+   * leave unsupported/foreign commands untouched. No URL or UUID is logged. */
+  Obj *hu_cmd=obj(1),*hu_args=obj(1);
+  set_obj(hu_cmd,"type",mkstr(0,"showUI",0));
+  set_obj(hu_args,"uuid",mkstr(0,"e5f7a68d-7b0f-4305-984b-974f677a150b",0));
+  set_obj(hu_args,"url",mkstr(0,"maps:/car/instrumentcluster?showETA=no&showSpeedLimit=user&maneuverLayout=rightAligned",0));
+  set_obj(hu_cmd,"params",hu_args);
+  struct ax_hu_command_meta hu_meta;
+  assert(ax_hu_parse_command(hu_cmd,&hu_meta)==AX_HU_CMD_SHOW&&hu_meta.url_valid);
+  assert(hu_meta.presentation.eta==AX_HU_NO&&hu_meta.presentation.maneuver==AX_HU_RIGHT);
+  set_obj(hu_args,"url",mkstr(0,"https://example.org/private",0));
+  assert(ax_hu_parse_command(hu_cmd,&hu_meta)==AX_HU_CMD_SHOW&&!hu_meta.url_valid);
+  set_obj(hu_cmd,"type",mkstr(0,"hidSendReport",0));
+  assert(ax_hu_parse_command(hu_cmd,&hu_meta)==AX_HU_CMD_OTHER);
+  void *evt=(void *)HU_PLIST_VA,*snd=(void *)PHONE_SEND_VA;
+  assert(bind_control_probe_hooks(&evt,&snd)&&evt==(void *)&relay_hu_plist_read&&snd==(void *)&relay_phone_command);
+  evt=(void *)1;snd=(void *)PHONE_SEND_VA;
+  assert(!bind_control_probe_hooks(&evt,&snd)&&evt==(void *)1&&snd==(void *)PHONE_SEND_VA);
+
+  /* A HU-owned URL is retained, coalesced and replayable on phone reconnect.
+   * The actual phone submission and completion ABI still needs target tests. */
+  Obj *cached_show=obj(1),*cached_params=obj(1);
+  set_obj(cached_show,"type",mkstr(0,"showUI",0));
+  set_obj(cached_params,"uuid",mkstr(0,"e5f7a68d-7b0f-4305-984b-974f677a150b",0));
+  set_obj(cached_params,"url",mkstr(0,"maps:/car/instrumentcluster?showETA=no",0));
+  set_obj(cached_show,"params",cached_params);
+  assert(ax_hu_parse_command(cached_show,&hu_meta)==AX_HU_CMD_SHOW&&hu_meta.url_valid);
+  assert(ax_control_capture(cached_show,&hu_meta));
+  Relay *ctl=test_relay((void *)0x1234,-1);
+  memcpy(ctl->uuid,"e5f7a68d-7b0f-4305-984b-974f677a150b",37);
+  assert(ax_control_has_ui(ctl->uuid));
+  unsigned cache_ver=ax_control[0].generation;
+  /* Deep snapshot must not change when the incoming params object is reused. */
+  void *remembered_params=dict_get(ax_control[0].plist,"params",dict_type());
+  void *remembered_url=dict_get(remembered_params,"url",string_type());
+  char initial_url[128]={0};
+  assert(remembered_url&&copystr(remembered_url,initial_url,sizeof initial_url,0));
+  assert(!strcmp(initial_url,"maps:/car/instrumentcluster?showETA=no"));
+  set_obj(cached_params,"url",mkstr(0,"maps:/car/instrumentcluster?showETA=yes",0));
+  remembered_url=dict_get(remembered_params,"url",string_type());
+  memset(initial_url,0,sizeof initial_url);
+  assert(remembered_url&&copystr(remembered_url,initial_url,sizeof initial_url,0));
+  assert(!strcmp(initial_url,"maps:/car/instrumentcluster?showETA=no"));
+  assert(ax_hu_parse_command(cached_show,&hu_meta)==AX_HU_CMD_SHOW&&hu_meta.url_valid);
+  assert(ax_control_capture(cached_show,&hu_meta));
+  assert(ax_control[0].generation>cache_ver);
+  /* A STOP owns UI slot 0 and must suppress fixed-url show on reconnect. */
+  Obj *cached_stop=obj(1);
+  set_obj(cached_stop,"type",mkstr(0,"stopUI",0));
+  set_obj(cached_stop,"params",cached_params);
+  assert(ax_hu_parse_command(cached_stop,&hu_meta)==AX_HU_CMD_STOP);
+  assert(ax_control_capture(cached_stop,&hu_meta));
+  assert(ax_control_has_ui(ctl->uuid)&&ax_control[0].kind==AX_HU_CMD_STOP);
+  Obj *cached_view=obj(1),*view_params=obj(1);
+  set_obj(cached_view,"type",mkstr(0,"updateViewArea",0));
+  set_obj(view_params,"uuid",mkstr(0,"e5f7a68d-7b0f-4305-984b-974f677a150b",0));
+  set_obj(cached_view,"params",view_params);
+  assert(ax_hu_parse_command(cached_view,&hu_meta)==AX_HU_CMD_VIEW);
+  assert(ax_control_capture(cached_view,&hu_meta)&&ax_control[1].plist);
+  ax_control_clear_profile("e5f7a68d-7b0f-4305-984b-974f677a150b");
+  assert(ax_control_has_ui(ctl->uuid));
+  ax_control_clear_profile("ffffffff-ffff-ffff-ffff-ffffffffffff");
+  assert(!ax_control_has_ui(ctl->uuid)&&!ax_control[1].plist);
+  ax_control_reset();
+  drop(ctl);
+  /* Same-session send is attempted only if stock did not already submit the
+   * qualified command. Replays preserve HU intent across phone generations. */
+  Relay *sender=test_relay((void *)0x1234,-1);
+  memcpy(sender->uuid,"e5f7a68d-7b0f-4305-984b-974f677a150b",37);
+  replace_current(sender);
+  stock_phone_command=ctrl_send_mock;
+  set_obj(cached_params,"url",mkstr(0,"maps:/car/instrumentcluster?showETA=no",0));
+  ax_hu_observe_plist(cached_show);
+  assert(ax_control_has_ui(sender->uuid)&&ctrl_send_calls==0);
+  assert(!relay_phone_command((void *)0x1234,cached_show,0,0));
+  assert(ctrl_send_calls==1&&!ax_control[0].pending);
+  assert(!ax_control_try_pending(0)); /* stock sent: never duplicate */
+  ax_hu_observe_plist(cached_show);
+  ax_control[0].due_ms=0;
+  assert(ax_control_try_pending(0)==1&&ctrl_send_calls==2);
+  assert(!ax_control_try_pending(0)); /* exactly one bounded fallback */
+  ax_control_replay(sender);
+  assert(ctrl_send_calls==3); /* latest car-owned UI on fresh phone session */
+  retire_relay(sender,"control_test_complete");drop(sender);ax_control_reset();
   void *out=0;Obj *r=obj(1);assert(!relay_setup((void *)1,r,&out));assert(last_request==r);
   r=req(110,101);assert(!relay_setup((void *)1,r,&out));assert(last_request==r);
   r=req(110,111);assert(!relay_setup((void *)1,r,&out));
@@ -89,10 +176,15 @@ int main(void){
   void *setup=(void *)SETUP_VA,*inf=(void *)INFO_VA,*td=(void *)TEARDOWN_VA,*prop=(void *)PLATFORM_COPY_VA;
   assert(bind_hooks(&setup,&inf,&td,&prop));assert(setup==(void *)&relay_setup&&prop==(void *)&relay_platform_copy);
   setup=(void *)SETUP_VA;inf=(void *)1;td=(void *)TEARDOWN_VA;prop=(void *)PLATFORM_COPY_VA;assert(!bind_hooks(&setup,&inf,&td,&prop)&&setup==(void *)SETUP_VA&&prop==(void *)PLATFORM_COPY_VA);
-  assert(uuid_valid("00000000-0000-4000-8000-000000000001"));assert(!uuid_valid("b7e6-bad"));
-  Obj *root=obj(1),*displays=obj(2),*display=obj(1);set_num(display,"type",111);set_num(display,"widthPixels",1010);set_num(display,"heightPixels",376);set_obj(display,"uuid",mkstr(0,"00000000-0000-4000-8000-000000000001",0));append(displays,display);set_obj(root,"displays",displays);
-  char uuid[128];assert(profile_read(root,uuid)&&!strcmp(uuid,"00000000-0000-4000-8000-000000000001"));
+  assert(uuid_valid("e5f7a68d-7b0f-4305-984b-974f677a150b"));assert(!uuid_valid("b7e6-bad"));
+  Obj *root=obj(1),*displays=obj(2),*display=obj(1);set_num(display,"type",111);set_num(display,"widthPixels",1010);set_num(display,"heightPixels",376);set_obj(display,"uuid",mkstr(0,"e5f7a68d-7b0f-4305-984b-974f677a150b",0));append(displays,display);set_obj(root,"displays",displays);
+  set_obj(display,"initialURL",mkstr(0,"maps:/car/instrumentcluster/map?showETA=no",0));
+  char initial_hu_url[384]={0};
+  assert(profile_read_initial_url(root,initial_hu_url)
+    &&!strcmp(initial_hu_url,"maps:/car/instrumentcluster/map?showETA=no"));
+  char uuid[128];assert(profile_read(root,uuid)&&!strcmp(uuid,"e5f7a68d-7b0f-4305-984b-974f677a150b"));
   info_root=root;int status=0;assert(relay_info(0,0,&status)==root&&!strcmp(profile_uuid,uuid));
+  assert(!strcmp(profile_initial_url,"maps:/car/instrumentcluster/map?showETA=no"));
   Obj *features=dict_get(root,"enabledFeatures",2);assert(features&&features->n==2);relay_info(0,0,&status);assert(((Obj *)dict_get(root,"enabledFeatures",2))->n==2);
   Obj *initial=obj(1);assert(!relay_setup((void *)1,initial,&out));
   /* Model the real stock caller: property lookup overwrites response AFTER Setup. */
