@@ -1,57 +1,72 @@
 #!/usr/bin/env python3
-"""Build the MIPS relay shared object and run offline POSIX host tests."""
+"""Build and run offline checks for the experimental v0.5 relay source only."""
+import json
 import os
 import pathlib
-import shlex
 import shutil
 import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
 BUILD = ROOT / "build"
-
-
-def command(name, default):
-    return shlex.split(os.environ.get(name, default))
+ZIG = pathlib.Path(os.environ.get("ZIG") or shutil.which("zig") or "zig")
+HOST_CC = os.environ.get("HOST_CC")
+HOST_TARGET = os.environ.get("HOST_TARGET", "x86_64-linux-musl")
+HOST_CFLAGS = json.loads(os.environ.get("HOST_CFLAGS_JSON", "[]"))
+HOST_RUNNER = json.loads(os.environ.get("HOST_RUNNER_JSON", "[]"))
 
 
 def run(argv):
     print("+", " ".join(map(str, argv)), flush=True)
-    subprocess.run([str(item) for item in argv], check=True, cwd=ROOT)
+    subprocess.run([str(x) for x in argv], check=True, cwd=ROOT)
 
 
-def available(executable):
-    return shutil.which(executable) or pathlib.Path(executable).is_file()
+def wsl_path(path):
+    absolute = pathlib.Path(path).resolve()
+    drive = absolute.drive.rstrip(":").lower()
+    tail = absolute.as_posix().split(":", 1)[1].lstrip("/")
+    return f"/mnt/host/{drive}/{tail}"
 
 
 def main():
-    zig = command("ZIG", "zig")
-    host_cc = command("HOST_CC", os.environ.get("CC", "cc"))
-    if not available(zig[0]):
-        raise SystemExit("Zig 0.14.1 not found; set ZIG to its executable")
-    version = subprocess.check_output(zig + ["version"], text=True).strip()
+    if not ZIG.is_file():
+        raise SystemExit(f"pinned Zig compiler not found: {ZIG}")
+    version = subprocess.check_output([str(ZIG), "version"], text=True).strip()
     if version != "0.14.1":
         raise SystemExit(f"expected Zig 0.14.1, got {version}")
-    if not available(host_cc[0]):
-        raise SystemExit("POSIX host compiler not found; set HOST_CC")
-
     BUILD.mkdir(exist_ok=True)
-    run(zig + ["cc", "-target", "mipsel-linux-gnueabihf.2.17", "-mcpu=mips32r2",
-               "-shared", "-fPIC", "-Os", "-nostdlib", "-Wl,-soname,libSdHOct.so",
-               "-o", BUILD / "libSdHOct.so", ROOT / "src/relay.c", "-lc", "-lpthread"])
+    run([ZIG, "cc", "-target", "mipsel-linux-gnueabihf.2.17", "-mcpu=mips32r2",
+         "-shared", "-fPIC", "-Os", "-nostdlib", "-Wl,-soname,libSdHOct.so",
+         "-o", BUILD / "libSdHOct.so", ROOT / "src/relay.c", "-lc", "-lpthread"])
 
-    extra_flags = shlex.split(os.environ.get("HOST_CFLAGS", ""))
-    for name in ("relay_test", "geometry_test"):
+    # An explicitly supplied POSIX compiler/flags/runner allow the same tests to
+    # run with local Clang or with Zig-built musl binaries launched through WSL.
+    host = pathlib.Path(HOST_CC) if HOST_CC else ZIG
+    if str(host.resolve()) == str(ZIG.resolve()):
+        compiler = [host, "cc", "-target", HOST_TARGET, "-static"]
+    else:
+        compiler = [host]
+    if HOST_RUNNER:
+        runner = list(HOST_RUNNER)
+    elif os.name == "nt" and HOST_TARGET.endswith("linux-musl"):
+        runner = ["wsl.exe", "--distribution", "docker-desktop", "--"]
+    else:
+        runner = []
+
+    for name in ("relay_test", "geometry_test", "hu_presentation_diag_test"):
         binary = BUILD / name
-        run(host_cc + ["-std=gnu11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
-                       "-Wno-unused-variable", "-DMSG_NOSIGNAL=0", "-UNDEBUG", "-O1", "-pthread"] +
-            extra_flags + [ROOT / f"tests/{name}.c", "-o", binary])
-        run([binary])
-
-    print(f"BUILD_PASS zig={version} target=mips32r2 host_tests=PASS firmware_package=NOT_BUILT")
+        run(compiler + ["-std=gnu11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+             "-Wno-unused-variable", "-DMSG_NOSIGNAL=0", "-UNDEBUG", "-O1"] + HOST_CFLAGS +
+             [ROOT / f"tests/{name}.c", "-o", binary])
+        executable = wsl_path(binary) if runner and runner[0].lower().startswith("wsl") else binary
+        run(runner + [executable])
+    (BUILD / "BUILD.json").write_text(json.dumps({
+        "build": "PASS", "zig": version, "host_target": HOST_TARGET,
+        "relay_host_regressions": "PASS", "geometry_regressions": "PASS",
+        "hu_presentation_diagnostics": "PASS",
+        "device_calls": False, "package_created": False
+    }, indent=2) + "\n")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except subprocess.CalledProcessError as error:
-        raise SystemExit(error.returncode)
+    main()

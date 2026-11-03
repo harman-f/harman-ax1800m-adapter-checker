@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "initial_profile.h"
+#include "seat_profile.h"
 #include "geometry.h"
 
 #define SETUP_VA 0x475668u
@@ -143,4 +143,4 @@ typedef int (*sendcmd_fn)(void *, void *, void *, void *);
 static sendcmd_fn session_send_command = (sendcmd_fn)0x472650u;
 #define K_CMD_PARAMS ((void *)0x52a250)
 #define K_CMD_URL ((void *)0x52a318)
-#define CLUSTER_MAP_URL INITIAL_CLUSTER_MAP_URL
+#define CLUSTER_MAP_URL SEAT_INITIAL_URL
